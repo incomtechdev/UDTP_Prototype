@@ -1,7 +1,7 @@
 /********************************************************************************
 ** Form generated from reading UI file 'mainwindow.ui'
 **
-** Created: Tue 6. Oct 09:13:34 2015
+** Created: Tue 6. Oct 18:28:45 2015
 **      by: Qt User Interface Compiler version 4.7.4
 **
 ** WARNING! All changes made in this file will be lost when recompiling UI file!
@@ -48,7 +48,6 @@ public:
     QFrame *frame_2;
     QFrame *frame_3;
     QFrame *frame_4;
-    QLabel *label_2;
     QFrame *frame_5;
     QLabel *label_4;
     QFrame *frame_6;
@@ -91,12 +90,14 @@ public:
         action_MenuClientOptions->setObjectName(QString::fromUtf8("action_MenuClientOptions"));
         action_ToolServerStarted = new QAction(Client_Server_MainWindow);
         action_ToolServerStarted->setObjectName(QString::fromUtf8("action_ToolServerStarted"));
-        action_ToolServerStarted->setIcon(icon);
+        QIcon icon1;
+        icon1.addFile(QString::fromUtf8(":/icons/icon/Home-Server-icon.png"), QSize(), QIcon::Normal, QIcon::Off);
+        action_ToolServerStarted->setIcon(icon1);
         action_ToolClientConnected = new QAction(Client_Server_MainWindow);
         action_ToolClientConnected->setObjectName(QString::fromUtf8("action_ToolClientConnected"));
-        QIcon icon1;
-        icon1.addFile(QString::fromUtf8("icon/right.png"), QSize(), QIcon::Normal, QIcon::Off);
-        action_ToolClientConnected->setIcon(icon1);
+        QIcon icon2;
+        icon2.addFile(QString::fromUtf8(":/icons/icon/right.png"), QSize(), QIcon::Normal, QIcon::Off);
+        action_ToolClientConnected->setIcon(icon2);
         action_ViewOptions = new QAction(Client_Server_MainWindow);
         action_ViewOptions->setObjectName(QString::fromUtf8("action_ViewOptions"));
         centralwidget = new QWidget(Client_Server_MainWindow);
@@ -130,17 +131,6 @@ public:
         frame_4->setMaximumSize(QSize(100, 25));
         frame_4->setFrameShape(QFrame::Box);
         frame_4->setFrameShadow(QFrame::Raised);
-        label_2 = new QLabel(frame_4);
-        label_2->setObjectName(QString::fromUtf8("label_2"));
-        label_2->setGeometry(QRect(0, 1, 101, 21));
-        label_2->setMinimumSize(QSize(0, 20));
-        label_2->setMaximumSize(QSize(16777215, 16777215));
-        QFont font;
-        font.setPointSize(10);
-        font.setBold(true);
-        font.setWeight(75);
-        label_2->setFont(font);
-        label_2->setAlignment(Qt::AlignCenter);
         frame_5 = new QFrame(frame);
         frame_5->setObjectName(QString::fromUtf8("frame_5"));
         frame_5->setGeometry(QRect(300, 0, 100, 25));
@@ -151,6 +141,10 @@ public:
         label_4 = new QLabel(frame_5);
         label_4->setObjectName(QString::fromUtf8("label_4"));
         label_4->setGeometry(QRect(0, 1, 101, 21));
+        QFont font;
+        font.setPointSize(10);
+        font.setBold(true);
+        font.setWeight(75);
         label_4->setFont(font);
         label_4->setAlignment(Qt::AlignCenter);
         frame_6 = new QFrame(frame);
@@ -282,7 +276,7 @@ public:
         Client_Server_MainWindow->setCentralWidget(centralwidget);
         menubar = new QMenuBar(Client_Server_MainWindow);
         menubar->setObjectName(QString::fromUtf8("menubar"));
-        menubar->setGeometry(QRect(0, 0, 638, 21));
+        menubar->setGeometry(QRect(0, 0, 638, 18));
         menuFTP_Server = new QMenu(menubar);
         menuFTP_Server->setObjectName(QString::fromUtf8("menuFTP_Server"));
         menuFTP_Client = new QMenu(menubar);
@@ -331,7 +325,6 @@ public:
         action_ToolClientConnected->setToolTip(QApplication::translate("Client_Server_MainWindow", "Client Connected", 0, QApplication::UnicodeUTF8));
 #endif // QT_NO_TOOLTIP
         action_ViewOptions->setText(QApplication::translate("Client_Server_MainWindow", "View Options", 0, QApplication::UnicodeUTF8));
-        label_2->setText(QApplication::translate("Client_Server_MainWindow", "F3  View", 0, QApplication::UnicodeUTF8));
         label_4->setText(QApplication::translate("Client_Server_MainWindow", "F4  Edit", 0, QApplication::UnicodeUTF8));
         label_3->setText(QApplication::translate("Client_Server_MainWindow", "F5  Copy", 0, QApplication::UnicodeUTF8));
         QTableWidgetItem *___qtablewidgetitem = right_tableWidget->horizontalHeaderItem(0);

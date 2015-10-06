@@ -1,11 +1,19 @@
 #include "UI.h"
+#include "server_options_dialog.h"
+#include "client_options_dialog.h"
+#include "viewer_options_dialog.h"
+#include <QKeyEvent>
+#include <QProcess>
 
-UI::UI(QWidget *parent) : QMainWindow(parent),
-						  left_dir(0),
-						  right_dir(0),
-						  currentPanel(0),
-						  ftpPanel(0)
+UI::UI(QWidget *parent) :   QMainWindow(parent),
+							left_dir(0),
+							right_dir(0),
+							ftpPanel(inactiveP),
+							config_data("conf.txt")
 {
+	fromToPanel[0] = UI::inactiveP;
+	fromToPanel[1] = UI::inactiveP;
+
 	ui.setupUi(this);
 	QFileInfoList drivesList = QDir::drives();
 	int driveCount = drivesList.size();
@@ -36,13 +44,20 @@ UI::UI(QWidget *parent) : QMainWindow(parent),
 
 	ui.left_tableWidget->setColumnCount(2);
 	ui.right_tableWidget->setColumnCount(2);
-	ShowDirFiles(PANELS::leftP);
-	ShowDirFiles(PANELS::rightP);
+	ShowDirFiles(UI::leftP);
+	ShowDirFiles(UI::rightP);
 
 	connect(ui.left_tableWidget, SIGNAL(itemDoubleClicked(QTableWidgetItem *)), this, SLOT(changeDirFromFileSystem(QTableWidgetItem *)));
+	connect(ui.left_tableWidget, SIGNAL(itemClicked(QTableWidgetItem *)), this, SLOT(SetWorkingPanel(QTableWidgetItem *)));
 	connect(ui.right_tableWidget, SIGNAL(itemDoubleClicked(QTableWidgetItem *)), this, SLOT(changeDirFromFileSystem(QTableWidgetItem *)));
+	connect(ui.right_tableWidget, SIGNAL(itemClicked(QTableWidgetItem *)), this, SLOT(SetWorkingPanel(QTableWidgetItem *)));
 	connect(ui.driveleft_comboBox, SIGNAL(currentIndexChanged(int)), this, SLOT(ChangeLeftDrive(int)));
 	connect(ui.driveright_comboBox, SIGNAL(currentIndexChanged(int)), this, SLOT(ChangeRightDrive(int)));
+
+	connect(ui.action_MenuServerOptions, SIGNAL(triggered(bool)), this, SLOT(OpenServerOptions(bool)));
+	connect(ui.action_MenuClientOptions, SIGNAL(triggered(bool)), this, SLOT(OpenClientOptions(bool)));
+	connect(ui.action_ViewOptions, SIGNAL(triggered(bool)), this, SLOT(OpenViewerOptions(bool)));
+
 
 }
 
@@ -59,12 +74,12 @@ void UI::ShowDirFiles(PANELS pID)
 	int driveInd;
 	switch (pID)
 	{
-	case PANELS::leftP:
+	case UI::leftP:
 		driveInd = ui.driveleft_comboBox->currentIndex();
 		ShowFilesFromPanel(ui.left_tableWidget, &left_dir[driveInd]);
 		ui.left_path_lineEdit->setText(left_dir[driveInd].path());
 		break;
-	case PANELS::rightP:
+	case UI::rightP:
 		driveInd = ui.driveright_comboBox->currentIndex();
 		ShowFilesFromPanel(ui.right_tableWidget, &right_dir[driveInd]);
 		ui.right_path_lineEdit->setText(right_dir[driveInd].path());
@@ -134,13 +149,13 @@ void UI::changeDirFromFileSystem(QTableWidgetItem * item)
 	{
 		driveInd = ui.driveleft_comboBox->currentIndex();
 		panel_dir = &left_dir[driveInd];
-		pID = PANELS::leftP;
+		pID = UI::leftP;
 	}
 	else
 	{
 		driveInd = ui.driveright_comboBox->currentIndex();
 		panel_dir = &right_dir[driveInd];
-		pID = PANELS::rightP;
+		pID = UI::rightP;
 	}
 
 
@@ -168,10 +183,103 @@ void UI::changeDirFromFileSystem(QTableWidgetItem * item)
 
 void UI::ChangeLeftDrive(int index)
 {
-	ShowDirFiles(PANELS::leftP);
+	ShowDirFiles(UI::leftP);
 }
 
 void UI::ChangeRightDrive(int index)
 {
-	ShowDirFiles(PANELS::rightP);
+	ShowDirFiles(UI::rightP);
+}
+
+void UI::OpenServerOptions(bool checked)
+{
+	Server_Options_dialog options_dialog(&config_data, this);
+	options_dialog.exec();
+}
+
+void UI::OpenClientOptions(bool checked)
+{
+	Client_Options_dialog options_dialog(&config_data, this);
+	options_dialog.exec();
+}
+
+void UI::OpenViewerOptions(bool checked)
+{
+	Viewer_Options_dialog options_dialog(&config_data, this);
+	options_dialog.exec();
+
+}
+
+void UI::SetWorkingPanel(QTableWidgetItem * item)
+{
+	QTableWidget *panel = item->tableWidget();
+	if (panel == ui.left_tableWidget)
+	{
+		fromToPanel[0] = UI::leftP;
+		fromToPanel[1] = UI::rightP;
+		ui.right_tableWidget->clearSelection();
+	}
+	else 
+	{
+		fromToPanel[0] = UI::rightP;
+		fromToPanel[1] = UI::leftP;
+		ui.left_tableWidget->clearSelection();
+	}
+
+}
+
+QTableWidget* UI::GetWorkingPanel()
+{
+	if (fromToPanel[0] == UI::leftP)
+		return ui.left_tableWidget;
+	else
+		return ui.right_tableWidget;
+}
+
+void UI::GetFromToDir(QDir *source, QDir *dest)
+{
+	if (fromToPanel[0] == UI::inactiveP)
+		return;
+
+	if (fromToPanel[0] == UI::leftP)
+	{
+		source = left_dir;
+		dest = right_dir;
+	}
+	else
+	{
+		source = right_dir;
+		dest = left_dir;
+	}
+}
+
+void UI::keyPressEvent(QKeyEvent *event)
+{
+	QString viewer ;
+	QTableWidget *selectPanel = 0;
+	QDir ftdir[2];
+	QString fname;
+	QString selectedFile;
+
+	switch (event->key())
+	{
+	case Qt::Key_F4: // view
+		viewer = config_data.getDataValue("UsedViewer");
+		if (viewer == "-")
+			viewer = config_data.getDataValue("DefaultViewer");
+		selectPanel = GetWorkingPanel();
+		GetFromToDir(&ftdir[0], &ftdir[1]);
+		fname=selectPanel->item(selectPanel->currentRow(), 0)->text();
+		selectedFile = ftdir[0].absoluteFilePath(fname);
+
+		QProcess::execute(viewer + " " + selectedFile);
+		break;
+
+	case Qt::Key_F5: // copy
+
+		break;
+
+	default:
+		break;
+	}
 }

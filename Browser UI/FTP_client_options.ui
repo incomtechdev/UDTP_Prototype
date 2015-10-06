@@ -1,17 +1,17 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
- <class>FTP_serverOptions_Dialog</class>
- <widget class="QDialog" name="FTP_serverOptions_Dialog">
+ <class>FTP_clientOptions_Dialog</class>
+ <widget class="QDialog" name="FTP_clientOptions_Dialog">
   <property name="geometry">
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>340</width>
-    <height>164</height>
+    <width>332</width>
+    <height>194</height>
    </rect>
   </property>
   <property name="windowTitle">
-   <string>Server Options</string>
+   <string>FTP Client Options</string>
   </property>
   <widget class="QFrame" name="frame">
    <property name="geometry">
@@ -19,7 +19,7 @@
      <x>30</x>
      <y>20</y>
      <width>291</width>
-     <height>41</height>
+     <height>71</height>
     </rect>
    </property>
    <property name="frameShape">
@@ -28,25 +28,51 @@
    <property name="frameShadow">
     <enum>QFrame::Sunken</enum>
    </property>
-   <widget class="QLabel" name="label_7">
+   <widget class="QLabel" name="label">
     <property name="geometry">
      <rect>
       <x>10</x>
       <y>10</y>
-      <width>81</width>
+      <width>51</width>
       <height>21</height>
      </rect>
     </property>
     <property name="text">
-     <string>Server Port</string>
+     <string>Server IP</string>
+    </property>
+   </widget>
+   <widget class="QLineEdit" name="IP_lineEdit">
+    <property name="geometry">
+     <rect>
+      <x>70</x>
+      <y>10</y>
+      <width>201</width>
+      <height>21</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string>127.0.0.1</string>
+    </property>
+   </widget>
+   <widget class="QLabel" name="label_7">
+    <property name="geometry">
+     <rect>
+      <x>10</x>
+      <y>40</y>
+      <width>31</width>
+      <height>21</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string>Port</string>
     </property>
    </widget>
    <widget class="QLineEdit" name="port_lineEdit">
     <property name="geometry">
      <rect>
-      <x>100</x>
-      <y>10</y>
-      <width>171</width>
+      <x>70</x>
+      <y>40</y>
+      <width>201</width>
       <height>20</height>
      </rect>
     </property>
@@ -59,7 +85,7 @@
    <property name="geometry">
     <rect>
      <x>30</x>
-     <y>70</y>
+     <y>100</y>
      <width>291</width>
      <height>80</height>
     </rect>
@@ -75,30 +101,30 @@
      <rect>
       <x>10</x>
       <y>50</y>
-      <width>61</width>
+      <width>46</width>
       <height>20</height>
      </rect>
     </property>
     <property name="text">
-     <string>Max Bitrate</string>
+     <string>Bitrate</string>
     </property>
    </widget>
    <widget class="QLineEdit" name="bitrate_lineEdit">
     <property name="geometry">
      <rect>
-      <x>100</x>
+      <x>70</x>
       <y>50</y>
-      <width>171</width>
+      <width>201</width>
       <height>20</height>
      </rect>
     </property>
    </widget>
-   <widget class="QCheckBox" name="usebitrate_checkBox">
+   <widget class="QCheckBox" name="userbitrate_checkBox">
     <property name="geometry">
      <rect>
-      <x>100</x>
+      <x>70</x>
       <y>10</y>
-      <width>161</width>
+      <width>181</width>
       <height>21</height>
      </rect>
     </property>
