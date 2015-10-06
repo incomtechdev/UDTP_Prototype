@@ -17,6 +17,7 @@ private:
 	enum PANELS{leftP = 0, rightP = 1, inactiveP = 2};
 
 	PANELS fromToPanel[2];
+	QTableWidget *fromToPanelWidget[2];
 	PANELS ftpPanel;
 	QDir *left_dir;  /// array for drives
 	QDir *right_dir; /// array for drives
@@ -29,7 +30,6 @@ private:
 	void ShowFilesFromPanel(QTableWidget *panel, QDir *dir);
 	void WriteLogMessage(const QString message);
 	void GetFromToDir(QDir *source, QDir *dest);
-	QTableWidget *GetWorkingPanel();
 
 public slots:
 	void changeDirFromFileSystem(QTableWidgetItem * item);

@@ -11,10 +11,14 @@ UI::UI(QWidget *parent) :   QMainWindow(parent),
 							ftpPanel(inactiveP),
 							config_data("conf.txt")
 {
+	ui.setupUi(this);
+
+
 	fromToPanel[0] = UI::inactiveP;
 	fromToPanel[1] = UI::inactiveP;
+	fromToPanelWidget[0] = ui.left_tableWidget;
+	fromToPanelWidget[1] = ui.right_tableWidget;
 
-	ui.setupUi(this);
 	QFileInfoList drivesList = QDir::drives();
 	int driveCount = drivesList.size();
 	left_dir = new QDir[driveCount];
@@ -216,24 +220,20 @@ void UI::SetWorkingPanel(QTableWidgetItem * item)
 	if (panel == ui.left_tableWidget)
 	{
 		fromToPanel[0] = UI::leftP;
+		fromToPanelWidget[0] = ui.left_tableWidget;
 		fromToPanel[1] = UI::rightP;
+		fromToPanelWidget[1] = ui.right_tableWidget;
 		ui.right_tableWidget->clearSelection();
 	}
 	else 
 	{
 		fromToPanel[0] = UI::rightP;
+		fromToPanelWidget[0] = ui.right_tableWidget;
 		fromToPanel[1] = UI::leftP;
+		fromToPanelWidget[1] = ui.left_tableWidget;
 		ui.left_tableWidget->clearSelection();
 	}
 
-}
-
-QTableWidget* UI::GetWorkingPanel()
-{
-	if (fromToPanel[0] == UI::leftP)
-		return ui.left_tableWidget;
-	else
-		return ui.right_tableWidget;
 }
 
 void UI::GetFromToDir(QDir *source, QDir *dest)
@@ -241,42 +241,87 @@ void UI::GetFromToDir(QDir *source, QDir *dest)
 	if (fromToPanel[0] == UI::inactiveP)
 		return;
 
+	int leftPInd = ui.driveleft_comboBox->currentIndex();
+	int rightPInd = ui.driveright_comboBox->currentIndex();
 	if (fromToPanel[0] == UI::leftP)
 	{
-		source = left_dir;
-		dest = right_dir;
+		*source = left_dir[leftPInd];
+		*dest = right_dir[rightPInd];
 	}
 	else
 	{
-		source = right_dir;
-		dest = left_dir;
+		*source = right_dir[rightPInd];
+		*dest = left_dir[leftPInd];
 	}
 }
+
+#define COPY_BUFFER 100000
 
 void UI::keyPressEvent(QKeyEvent *event)
 {
 	QString viewer ;
 	QTableWidget *selectPanel = 0;
-	QDir ftdir[2];
+	QDir dir_source, dir_dest;
+	QFile file_source, file_dest;
 	QString fname;
 	QString selectedFile;
+	char copyData[COPY_BUFFER];
+	qint64 buffsize;
 
+	string test;
 	switch (event->key())
 	{
 	case Qt::Key_F4: // view
 		viewer = config_data.getDataValue("UsedViewer");
 		if (viewer == "-")
 			viewer = config_data.getDataValue("DefaultViewer");
-		selectPanel = GetWorkingPanel();
-		GetFromToDir(&ftdir[0], &ftdir[1]);
+		selectPanel = fromToPanelWidget[0];
+		GetFromToDir(&dir_source, &dir_dest);
 		fname=selectPanel->item(selectPanel->currentRow(), 0)->text();
-		selectedFile = ftdir[0].absoluteFilePath(fname);
-
+		selectedFile = dir_source.absoluteFilePath(fname);
 		QProcess::execute(viewer + " " + selectedFile);
+		file_source.setFileName(selectedFile);
+		buffsize = 0;
+		if (file_source.open(QIODevice::ReadOnly))
+		{
+			buffsize = file_source.size();  //when file does open.
+			file_source.close();
+		}
+		selectPanel->item(selectPanel->currentRow(), 1)->setText(QString::number(buffsize));
+		if (dir_source.absolutePath() == dir_dest.absolutePath())
+			fromToPanelWidget[1]->item(selectPanel->currentRow(), 1)->setText(QString::number(buffsize));
 		break;
 
 	case Qt::Key_F5: // copy
-
+		selectPanel = fromToPanelWidget[0];
+		GetFromToDir(&dir_source, &dir_dest);
+		fname = selectPanel->item(selectPanel->currentRow(), 0)->text();
+		file_source.setFileName(dir_source.absoluteFilePath(fname));
+		file_dest.setFileName(dir_dest.absoluteFilePath(fname));
+		file_source.setFileName(dir_source.absoluteFilePath(fname));
+		if (dir_dest.absoluteFilePath(fname) == dir_source.absoluteFilePath(fname))
+		{
+			WriteLogMessage("Can't copy file " + dir_source.absoluteFilePath(fname) + " to the same path. Copy aborted");
+			break;
+		}
+		if (!file_source.open(QIODevice::ReadOnly | QIODevice::Text))
+		{
+			WriteLogMessage("Can't open file " + dir_source.absoluteFilePath(fname) + " for read. Copy aborted");
+			break;
+		}
+		if (!file_dest.open(QIODevice::Truncate | QIODevice::Append | QIODevice::Text))
+		{
+			WriteLogMessage("Can't open file " + dir_dest.absoluteFilePath(fname) + " for read. Copy aborted");
+			break;
+		}
+		while (!file_source.atEnd())
+		{
+			buffsize=file_source.read(copyData, COPY_BUFFER);
+			file_dest.write(copyData, buffsize);
+		}
+		file_source.close();
+		file_dest.close();
+		ShowDirFiles(fromToPanel[1]);
 		break;
 
 	default:

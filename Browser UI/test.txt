@@ -25,3 +25,7 @@ SOURCES     = loader.cpp \
 			  viewer_options_dialog.cpp
 			  
 RESOURCES   = iconres.qrc
+
+
+
+sdfsfsdfsfsfsfsfsdfsdfsdsadasdasdasdadad
