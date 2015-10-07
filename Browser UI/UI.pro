@@ -2,6 +2,7 @@ TEMPLATE  = app
 LANGUAGE  = C++
 CONFIG	 += console precompile_header
 CONFIG   -= app_bundle
+QT       += widgets
 
 TEMPLATE    = app
 
@@ -16,7 +17,8 @@ HEADERS     = UI.h \
 			  server_options_dialog.h \
 			  client_options_dialog.h \
 			  viewer_options_dialog.h \
-			  progress_copy_dialog.h
+			  progress_copy_dialog.h \
+			  FTP_server_thread.h
 			  
 SOURCES     = loader.cpp \
               UI.cpp \
@@ -24,6 +26,7 @@ SOURCES     = loader.cpp \
 			  server_options_dialog.cpp \
 			  client_options_dialog.cpp	 \ 
 			  viewer_options_dialog.cpp \
-			  progress_copy_dialog.cpp
+			  progress_copy_dialog.cpp \
+			  FTP_server_thread.cpp
 			  
 RESOURCES   = iconres.qrc

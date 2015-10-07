@@ -1,7 +1,6 @@
 #include "UI.h"
 #include "progress_copy_dialog.h"
 #include "windows.h"
-#include <QTimer>
 
 using namespace std;
 
@@ -26,7 +25,7 @@ ClientCopyThread::ClientCopyThread(	CopyProgress_dialog *_main_thread,
 
 void ClientCopyThread::run()
 {
-	const int COPY_BUFFER = 1000;
+	const int COPY_BUFFER = 100000;
 	bytesCopied = 0;
 	char copyData[COPY_BUFFER];
 	qint64 buffsize;
@@ -53,7 +52,8 @@ CopyProgress_dialog::CopyProgress_dialog(	UI *_mainwnd,
 											mainwnd(_mainwnd),
 											bytesCopied(0),
 											fileSize(0),
-											FTPcopyType(_FTPcopyType)
+											FTPcopyType(_FTPcopyType),
+											copyThread(0)
 {
 	ui.setupUi(this);
 	ui.source_label->setText(_filesource);
@@ -61,11 +61,17 @@ CopyProgress_dialog::CopyProgress_dialog(	UI *_mainwnd,
 	ui.copy_progressBar->reset();
 }
 
+CopyProgress_dialog::~CopyProgress_dialog()
+{
+	if (copyThread)
+		delete copyThread;
+}
+
 bool CopyProgress_dialog::OpenFilesForCopy()
 {
 	if (FTPcopyType > 1)
 	{
-		if (!source.open(QIODevice::ReadOnly | QIODevice::Text))
+		if (!source.open(QIODevice::ReadOnly))
 		{
 			mainwnd->WriteLogMessage("Can't open file " + source.fileName() + " for read. Copy aborted");
 			return false;
@@ -77,7 +83,7 @@ bool CopyProgress_dialog::OpenFilesForCopy()
 
 		source.setPermissions(QFile::ReadOwner | QFile::ReadGroup | QFile::ReadOther);
 
-		if (!dest.open(QIODevice::Truncate | QIODevice::Append | QIODevice::Text))
+		if (!dest.open(QIODevice::Truncate | QIODevice::Append))
 		{
 			mainwnd->WriteLogMessage("Can't open file " + source.fileName() + " for write. Copy aborted");
 			source.setPermissions(source_permissions);
@@ -122,8 +128,8 @@ void CopyProgress_dialog::showEvent(QShowEvent *event)
 {
 	if (FTPcopyType > 1)
 	{
-		ClientCopyThread *t = new ClientCopyThread(this, &source, &source_permissions, &dest);
-		t->start();
+		copyThread = new ClientCopyThread(this, &source, &source_permissions, &dest);
+		copyThread->start();
 	}
 
 	else   ///// FTP COPY

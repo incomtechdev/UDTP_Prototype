@@ -1,7 +1,12 @@
+#ifndef _UI_
+#define _UI_
+
 #include "ui_mainwindow.h"
 #include <QDir>
 #include <QFileIconProvider>
 #include "config.h"
+
+class FTPServer;
 
 class UI : public QMainWindow
 {
@@ -12,7 +17,6 @@ public:
 	~UI();
 
 	void keyPressEvent(QKeyEvent * event);
-	void WriteLogMessage(const QString message);
 
 private:
 	enum PANELS{leftP = 0, rightP = 1, inactiveP = 2};
@@ -23,6 +27,8 @@ private:
 	QDir *left_dir;  /// array for drives
 	QDir *right_dir; /// array for drives
 
+	FTPServer *serverThread;
+	bool FTPServerRun;
 
 	Ui::Client_Server_MainWindow ui;
 	UI_config config_data;
@@ -37,12 +43,20 @@ private:
 	void CopyClientToFTP();
 
 public slots:
+	void SetFTPServerStatus(bool status);
+	void WriteLogMessage(const QString &message);
 	void changeDirFromFileSystem(QTableWidgetItem * item);
 	void SetWorkingPanel(QTableWidgetItem * item);
 	void ChangeLeftDrive(int index);
 	void ChangeRightDrive(int index);
 
+	void StartFTPServer(bool checked = false);
 	void OpenServerOptions(bool checked = false);
 	void OpenClientOptions(bool checked = false);
 	void OpenViewerOptions(bool checked = false);
+
+signals:
+	void abortServer();
 };
+
+#endif

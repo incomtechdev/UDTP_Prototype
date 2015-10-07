@@ -14,7 +14,6 @@ private:
 	QFile *dest;
 	CopyProgress_dialog *main_thread;
 	qint64 bytesCopied;
-	QTimer *timer;
 
 public:
 	ClientCopyThread(	CopyProgress_dialog *_main_thread,
@@ -38,6 +37,8 @@ class CopyProgress_dialog : public QDialog
 	Q_OBJECT
 
 private:
+	ClientCopyThread *copyThread;
+
 	QFile source;
 	QFile::Permissions source_permissions;
 	QFile dest;
@@ -51,6 +52,7 @@ private:
 public:
 	CopyProgress_dialog(UI *_mainwnd, const QString &_filesource, const QString &_filedest, int _FTPcopyType);
 	//  FTPcopyType =  0 - filesource is ftp, 1 - filedest if ftp, 2+ - none is ftp
+	~CopyProgress_dialog();
 
 	bool OpenFilesForCopy();
 	void CloseFiles();

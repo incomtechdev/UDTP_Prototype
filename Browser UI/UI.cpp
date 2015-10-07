@@ -3,6 +3,7 @@
 #include "client_options_dialog.h"
 #include "viewer_options_dialog.h"
 #include "progress_copy_dialog.h"
+#include "FTP_server_thread.h"
 #include <QKeyEvent>
 #include <QProcess>
 
@@ -10,7 +11,9 @@ UI::UI(QWidget *parent) :   QMainWindow(parent),
 							left_dir(0),
 							right_dir(0),
 							ftpPanel(inactiveP),
-							config_data("conf.txt")
+							config_data("conf.txt"),
+							serverThread(0),
+							FTPServerRun(false)
 {
 	ui.setupUi(this);
 
@@ -63,7 +66,8 @@ UI::UI(QWidget *parent) :   QMainWindow(parent),
 	connect(ui.action_MenuClientOptions, SIGNAL(triggered(bool)), this, SLOT(OpenClientOptions(bool)));
 	connect(ui.action_ViewOptions, SIGNAL(triggered(bool)), this, SLOT(OpenViewerOptions(bool)));
 
-
+	connect(ui.action_ToolServerStarted, SIGNAL(triggered(bool)), this, SLOT(StartFTPServer(bool)));
+	connect(ui.action_MenuServerStarted, SIGNAL(triggered(bool)), this, SLOT(StartFTPServer(bool)));
 }
 
 UI::~UI()
@@ -72,6 +76,9 @@ UI::~UI()
 		delete[] left_dir;
 	if (right_dir)
 		delete[] right_dir;
+
+	if (serverThread)
+		delete serverThread;
 }
 
 void UI::ShowDirFiles(PANELS pID)
@@ -138,9 +145,11 @@ void UI::ShowFilesFromPanel(QTableWidget *panel, QDir *dir)
 	}
 }
 
-void UI::WriteLogMessage(const QString message)
+void UI::WriteLogMessage(const QString &message)
 {
-	ui.log_listWidget->addItem(message);
+	QListWidgetItem *item = new QListWidgetItem(message);
+	ui.log_listWidget->addItem(item);
+	ui.log_listWidget->setCurrentItem(item);
 }
 
 void UI::changeDirFromFileSystem(QTableWidgetItem * item)
@@ -334,3 +343,35 @@ void UI::EditFTP()
 
 void UI::CopyClientToFTP()
 {}
+
+void UI::StartFTPServer(bool checked)
+{
+	if (!FTPServerRun)
+	{
+		serverThread = new FTPServer(	this,
+										config_data.getDataValue("ServerHomeDir"),
+										config_data.getDataValue("ServerPort").toShort(),
+										config_data.getDataValue("ServerBitrate").toLong());
+		serverThread->start();
+	}
+	else
+	{
+		if (serverThread)
+			emit abortServer();
+	}
+
+}
+
+void UI::SetFTPServerStatus(bool status)
+{
+	FTPServerRun = status;
+	if (!status)
+	{
+		if (serverThread)
+		{
+			serverThread->terminate();
+			delete serverThread;
+			serverThread = 0;
+		}
+	}
+}

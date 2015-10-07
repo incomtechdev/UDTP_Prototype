@@ -1,8 +1,9 @@
-ServerIP 127.0.0.1
 ServerPort 1234
 ServerBitrateAccept 1
 ServerBitrate 10000
+ServerHomeDir X:\UI
 
+ServerIP 127.0.0.1
 ClientPort 1234
 ClientBitrateAccept 0
 ClientBitrate 1000
