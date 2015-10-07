@@ -12,6 +12,7 @@ public:
 	~UI();
 
 	void keyPressEvent(QKeyEvent * event);
+	void WriteLogMessage(const QString message);
 
 private:
 	enum PANELS{leftP = 0, rightP = 1, inactiveP = 2};
@@ -28,8 +29,12 @@ private:
 
 	void ShowDirFiles(PANELS pID);
 	void ShowFilesFromPanel(QTableWidget *panel, QDir *dir);
-	void WriteLogMessage(const QString message);
 	void GetFromToDir(QDir *source, QDir *dest);
+
+	void EditClient();
+	void EditFTP();
+	void CopyClientToClient();
+	void CopyClientToFTP();
 
 public slots:
 	void changeDirFromFileSystem(QTableWidgetItem * item);

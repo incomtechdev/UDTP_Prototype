@@ -2,6 +2,7 @@
 #include "server_options_dialog.h"
 #include "client_options_dialog.h"
 #include "viewer_options_dialog.h"
+#include "progress_copy_dialog.h"
 #include <QKeyEvent>
 #include <QProcess>
 
@@ -255,76 +256,81 @@ void UI::GetFromToDir(QDir *source, QDir *dest)
 	}
 }
 
-#define COPY_BUFFER 100000
-
 void UI::keyPressEvent(QKeyEvent *event)
 {
-	QString viewer ;
+	switch (event->key())
+	{
+	case Qt::Key_F4: // view
+		if (ftpPanel != UI::inactiveP) /// one panel is FTP
+			EditFTP();
+		else
+			EditClient();
+		break;
+
+	case Qt::Key_F5: // copy
+		if (ftpPanel != UI::inactiveP) /// one panel is FTP
+			CopyClientToFTP();
+		else
+			CopyClientToClient();
+		break;
+	default:
+		break;
+	}
+}
+
+void UI::EditClient()
+{
+	QString viewer;
 	QTableWidget *selectPanel = 0;
 	QDir dir_source, dir_dest;
 	QFile file_source, file_dest;
 	QString fname;
 	QString selectedFile;
-	char copyData[COPY_BUFFER];
 	qint64 buffsize;
 
-	string test;
-	switch (event->key())
+
+	viewer = config_data.getDataValue("UsedViewer");
+	if (viewer == "-")
+		viewer = config_data.getDataValue("DefaultViewer");
+	selectPanel = fromToPanelWidget[0];
+	GetFromToDir(&dir_source, &dir_dest);
+	fname = selectPanel->item(selectPanel->currentRow(), 0)->text();
+	selectedFile = dir_source.absoluteFilePath(fname);
+	QProcess::execute(viewer + " " + selectedFile);
+	file_source.setFileName(selectedFile);
+	buffsize = 0;
+	if (file_source.open(QIODevice::ReadOnly))
 	{
-	case Qt::Key_F4: // view
-		viewer = config_data.getDataValue("UsedViewer");
-		if (viewer == "-")
-			viewer = config_data.getDataValue("DefaultViewer");
-		selectPanel = fromToPanelWidget[0];
-		GetFromToDir(&dir_source, &dir_dest);
-		fname=selectPanel->item(selectPanel->currentRow(), 0)->text();
-		selectedFile = dir_source.absoluteFilePath(fname);
-		QProcess::execute(viewer + " " + selectedFile);
-		file_source.setFileName(selectedFile);
-		buffsize = 0;
-		if (file_source.open(QIODevice::ReadOnly))
-		{
-			buffsize = file_source.size();  //when file does open.
-			file_source.close();
-		}
-		selectPanel->item(selectPanel->currentRow(), 1)->setText(QString::number(buffsize));
-		if (dir_source.absolutePath() == dir_dest.absolutePath())
-			fromToPanelWidget[1]->item(selectPanel->currentRow(), 1)->setText(QString::number(buffsize));
-		break;
-
-	case Qt::Key_F5: // copy
-		selectPanel = fromToPanelWidget[0];
-		GetFromToDir(&dir_source, &dir_dest);
-		fname = selectPanel->item(selectPanel->currentRow(), 0)->text();
-		file_source.setFileName(dir_source.absoluteFilePath(fname));
-		file_dest.setFileName(dir_dest.absoluteFilePath(fname));
-		file_source.setFileName(dir_source.absoluteFilePath(fname));
-		if (dir_dest.absoluteFilePath(fname) == dir_source.absoluteFilePath(fname))
-		{
-			WriteLogMessage("Can't copy file " + dir_source.absoluteFilePath(fname) + " to the same path. Copy aborted");
-			break;
-		}
-		if (!file_source.open(QIODevice::ReadOnly | QIODevice::Text))
-		{
-			WriteLogMessage("Can't open file " + dir_source.absoluteFilePath(fname) + " for read. Copy aborted");
-			break;
-		}
-		if (!file_dest.open(QIODevice::Truncate | QIODevice::Append | QIODevice::Text))
-		{
-			WriteLogMessage("Can't open file " + dir_dest.absoluteFilePath(fname) + " for read. Copy aborted");
-			break;
-		}
-		while (!file_source.atEnd())
-		{
-			buffsize=file_source.read(copyData, COPY_BUFFER);
-			file_dest.write(copyData, buffsize);
-		}
+		buffsize = file_source.size();  //when file does open.
 		file_source.close();
-		file_dest.close();
-		ShowDirFiles(fromToPanel[1]);
-		break;
+	}
+	selectPanel->item(selectPanel->currentRow(), 1)->setText(QString::number(buffsize));
+	if (dir_source.absolutePath() == dir_dest.absolutePath())
+		fromToPanelWidget[1]->item(selectPanel->currentRow(), 1)->setText(QString::number(buffsize));
+}
 
-	default:
-		break;
+void UI::CopyClientToClient()
+{
+	QTableWidget *selectPanel = 0;
+	QDir dir_source, dir_dest;
+	QString fname;
+
+	selectPanel = fromToPanelWidget[0];
+	GetFromToDir(&dir_source, &dir_dest);
+	fname = selectPanel->item(selectPanel->currentRow(), 0)->text();
+
+	CopyProgress_dialog progress_dialog(this, dir_source.absoluteFilePath(fname), dir_dest.absoluteFilePath(fname), 2);
+	if (progress_dialog.OpenFilesForCopy())
+	{
+		progress_dialog.exec();
+		progress_dialog.CloseFiles();
+
+		ShowDirFiles(fromToPanel[1]);
 	}
 }
+
+void UI::EditFTP()
+{}
+
+void UI::CopyClientToFTP()
+{}
