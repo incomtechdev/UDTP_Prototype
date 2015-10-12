@@ -102,7 +102,7 @@ void UI::FTP_Client_Running()
 	setsockopt(clientData->sock, SOL_SOCKET, SO_REUSEADDR, (char *)(1), sizeof (1));
 
 //// coonect to server
-	if (_connect(&clientData->sock, (sockaddr*)(&clientData->addr), sizeof(clientData->addr)) == SOCKET_ERROR)
+	if (Connect_Client() == SOCKET_ERROR)
 	{
 		WriteLogMessage("Socket Creating Error");
 		AbortClient();
@@ -110,17 +110,21 @@ void UI::FTP_Client_Running()
 	}
 
 	ftpPanel = fromToPanel[0];
-
-	char isOK = 0;
-	if (recv(clientData->sock, &isOK, 1, 0) == SOCKET_ERROR)
-	{
-		AbortClient();
-		return;
-	}
-
 	ExecFTPCommand("dir .");
 
 }
+
+/*
+int UI::Connect_Client()
+{
+	if (_connect(&clientData->sock, (sockaddr*)(&clientData->addr), sizeof(clientData->addr)) == SOCKET_ERROR)
+		return SOCKET_ERROR;
+
+	char isOK = 0;
+	if (recv(clientData->sock, &isOK, 1, 0) == SOCKET_ERROR)
+		return SOCKET_ERROR;
+}
+*/
 
 void UI::AbortClient()
 {
@@ -143,6 +147,7 @@ void UI::AbortClient()
 	FTPClientRun = false;
 }
 
+/*
 int UI::ExecFTPCommand(const QString &command)
 {
 	char isOK = 1;
@@ -229,3 +234,5 @@ int UI::ExecFTPCommand(const QString &command)
 
 	return 0;
 }
+
+*/

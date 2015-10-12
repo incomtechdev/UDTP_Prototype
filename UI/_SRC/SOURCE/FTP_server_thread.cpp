@@ -157,7 +157,6 @@ void FTPServer::AbortServer()
 		closesocket(serverSock);
 	emit writeLog("Server Aborted");
 	emit setFTPServerStatus(false);
-	WSACleanup();
 }
 
 int FTPServer::FTPServerRunning()
@@ -256,6 +255,7 @@ int FTPServer::FTPServerRunning()
 	return 0;
 }
 
+/*
 ClientBase *FTPServer::Accept_new_Client()
 {
 	sockaddr_in newAddr;
@@ -416,10 +416,12 @@ int FTPServer::ExecCommandOperation(ClientBase *curClient)
 	return 0;
 }
 
+
 int FTPServer::ExecFileOperation(ClientBase *curClient)
 {
 	return SOCKET_ERROR;
 }
+*/
 
 SOCKET FTPServer::GetSock()
 {

@@ -1,9 +1,0 @@
-<RCC>
-  <qresource prefix="icons">
-    <file>icon/Home-Server-icon.png</file>
-    <file>icon/right.png</file>
-    <file>icon/forward_button.png</file>
-    <file>icon/ftp_icon.png</file>
-    <file>icon/ftp.png</file>
-  </qresource>
-</RCC>

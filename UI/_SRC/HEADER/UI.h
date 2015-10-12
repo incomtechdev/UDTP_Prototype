@@ -22,8 +22,12 @@ public:
 	void keyPressEvent(QKeyEvent * event);
 	UI_config *getConfig();
 	void setFTPData(FTPClient *_clientData);
-
+	int Connect_Client();
+	HINSTANCE GetDLLHandle();
 private:
+	HINSTANCE dllHandle; ///// DLL Loading Handle
+
+
 	WSADATA wsaData;
 
 	enum PANELS{leftP = 0, rightP = 1, inactiveP = 2};
@@ -57,7 +61,6 @@ private:
 
 	int ExecFTPCommand(const QString &command);
 	PANELS GetPannelIDFromWidget(QTableWidget *panel);
-
 public slots:
 	void SetFTPServerStatus(bool status);
 	void WriteLogMessage(const QString &message);

@@ -82,6 +82,9 @@ UI::UI(QWidget *parent) :   QMainWindow(parent),
 
 	if (WSAStartup(0x0202, &wsaData) != 0)
 		WriteLogMessage("Error in starting WSAStartup()");
+
+	QString udtp_dll_path = config_data.getDataValue("UDTPdllPath");
+	dllHandle = LoadLibrary(udtp_dll_path.toStdWString().c_str());
 }
 
 UI::~UI()
@@ -95,6 +98,9 @@ UI::~UI()
 		delete serverThread;
 	if (clientData)
 		delete clientData;
+
+	if (dllHandle)
+		FreeLibrary(dllHandle);
 
 	WSACleanup();
 }
@@ -472,4 +478,9 @@ UI::PANELS UI::GetPannelIDFromWidget(QTableWidget *panel)
 		return UI::rightP;
 
 	return UI::inactiveP;
+}
+
+HINSTANCE UI::GetDLLHandle()
+{
+	return dllHandle;
 }

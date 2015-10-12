@@ -9,3 +9,5 @@ ClientBitrate =1000
 
 DefaultViewer = notepad.exe
 UsedViewer = -
+
+UDTPdllPath = ./DLL/aaclient.dll

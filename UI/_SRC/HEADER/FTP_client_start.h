@@ -1,7 +1,6 @@
 #ifndef _FTP_CLIENT_START_DIALOG_
 #define _FTP_CLIENT_START_DIALOG_
 
-#include "FTP_client_server_classes.h"
 #include "ui_FTP_client_connection.h"
 
 #pragma comment(lib,"Ws2_32.lib")
