@@ -4,6 +4,7 @@
 #include "viewer_options_dialog.h"
 #include "progress_copy_dialog.h"
 #include "FTP_server_thread.h"
+#include "FTP_client_start.h"
 #include <QKeyEvent>
 #include <QProcess>
 
@@ -13,7 +14,9 @@ UI::UI(QWidget *parent) :   QMainWindow(parent),
 							ftpPanel(inactiveP),
 							config_data("conf.txt"),
 							serverThread(0),
-							FTPServerRun(false)
+							clientData(0),
+							FTPServerRun(false),
+							FTPClientRun(false)
 {
 	ui.setupUi(this);
 
@@ -68,6 +71,12 @@ UI::UI(QWidget *parent) :   QMainWindow(parent),
 
 	connect(ui.action_ToolServerStarted, SIGNAL(triggered(bool)), this, SLOT(StartFTPServer(bool)));
 	connect(ui.action_MenuServerStarted, SIGNAL(triggered(bool)), this, SLOT(StartFTPServer(bool)));
+
+	connect(ui.action_MenuClientConnected, SIGNAL(triggered(bool)), this, SLOT(StartFTPClient(bool)));
+	connect(ui.action_ToolClientConnected, SIGNAL(triggered(bool)), this, SLOT(StartFTPClient(bool)));
+
+	ui.left_tableWidget->itemClicked(ui.left_tableWidget->item(0,0));
+	ui.left_tableWidget->selectRow(0);
 }
 
 UI::~UI()
@@ -81,34 +90,72 @@ UI::~UI()
 		delete serverThread;
 }
 
-void UI::ShowDirFiles(PANELS pID)
+void UI::ShowDirFiles(PANELS pID, QStringList *filesList)
 {
 	int driveInd;
 	switch (pID)
 	{
 	case UI::leftP:
 		driveInd = ui.driveleft_comboBox->currentIndex();
-		ShowFilesFromPanel(ui.left_tableWidget, &left_dir[driveInd]);
-		ui.left_path_lineEdit->setText(left_dir[driveInd].path());
+		if (ftpPanel == UI::inactiveP)
+		{
+			ShowFilesFromPanel(ui.left_tableWidget, &left_dir[driveInd]);
+			ui.left_path_lineEdit->setText(left_dir[driveInd].path());
+		}
+		else if (ftpPanel == UI::leftP)
+		{
+			ShowFilesFromPanel(ui.left_tableWidget, 0, filesList);
+			ui.left_path_lineEdit->setText(clientData->ftpDir);
+		}
 		break;
 	case UI::rightP:
 		driveInd = ui.driveright_comboBox->currentIndex();
-		ShowFilesFromPanel(ui.right_tableWidget, &right_dir[driveInd]);
-		ui.right_path_lineEdit->setText(right_dir[driveInd].path());
+		if (ftpPanel == UI::inactiveP)
+		{
+			ShowFilesFromPanel(ui.right_tableWidget, &right_dir[driveInd]);
+			ui.right_path_lineEdit->setText(right_dir[driveInd].path());
+		}
+		else if (ftpPanel == UI::rightP)
+		{
+			ShowFilesFromPanel(ui.right_tableWidget, 0, filesList);
+			ui.right_path_lineEdit->setText(clientData->ftpDir);
+		}
 		break;
 	default:
 		WriteLogMessage("Error in ShowDirFiles function");
 	}
 }
 
-void UI::ShowFilesFromPanel(QTableWidget *panel, QDir *dir)
+void UI::ShowFilesFromPanel(QTableWidget *panel, QDir *dir, QStringList *filesList)
 {
 	QStringList dirFiles;
 	QStringList files;
 	QFileIconProvider fp;
 	QTableWidgetItem *item;
 	int i = 0;
-	if (dir->exists())
+	if (dir == 0 && filesList != 0)  ///// FROM FTP
+	{
+		panel->clear();
+		panel->setRowCount(filesList->count());
+		for (i = 0; i < filesList->count(); i++)
+		{
+			if (filesList->at(i).size() == 0)
+				continue;
+			QStringList fileAttrib = filesList->at(i).split(":");
+			if (fileAttrib.size() < 2)
+				continue;
+			item = new QTableWidgetItem(fileAttrib[1]);
+			if (fileAttrib[0] == "0" || fileAttrib[0] == "1" || fileAttrib[0] == "2")
+				item->setIcon(fp.icon(QFileIconProvider::Folder));
+			else
+				item->setIcon(fp.icon(QFileIconProvider::File));
+			panel->setItem(i, 0, item);
+			item = new QTableWidgetItem(fileAttrib[2]);
+			panel->setItem(i, 1, item);
+			panel->setRowHeight(i, 14);
+		}
+	}
+	else if (dir->exists())
 	{
 
 		panel->clear();
@@ -143,6 +190,7 @@ void UI::ShowFilesFromPanel(QTableWidget *panel, QDir *dir)
 			panel->setRowHeight(dircount + i, 14);
 		}
 	}
+	panel->selectRow(0);
 }
 
 void UI::WriteLogMessage(const QString &message)
@@ -366,6 +414,20 @@ void UI::StartFTPServer(bool checked)
 
 }
 
+void UI::StartFTPClient(bool checked)
+{
+	if (!FTPClientRun)
+	{
+		FTP_Client_Start_dialog	client_start_dialog(this);
+		if (client_start_dialog.exec() == true)
+			FTP_Client_Running();
+		else
+			AbortClient();
+	}
+	else
+		AbortClient();
+}
+
 void UI::SetFTPServerStatus(bool status)
 {
 	FTPServerRun = status;
@@ -376,6 +438,19 @@ void UI::SetFTPServerStatus(bool status)
 			serverThread->terminate();
 			delete serverThread;
 			serverThread = 0;
+
+			if (FTPClientRun)
+				AbortClient();
 		}
 	}
+}
+
+UI_config *UI::getConfig()
+{
+	return &config_data; 
+}
+
+void UI::setFTPData(FTPClient *_clientData)
+{
+	clientData = _clientData; 
 }

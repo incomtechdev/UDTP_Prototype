@@ -19,6 +19,8 @@ class ClientBase
 
 	ClientBase *firstClient;
 
+	QDir curDir;
+
 public:
 	ClientBase();
 	ClientBase(sockaddr_in _clientAddr, SOCKET _clientSock);
@@ -30,6 +32,9 @@ public:
 	void AddClient(ClientBase *newClient);
 	void DeleteClient(ClientBase *delClient);
 	ClientBase *FindClientBySock(SOCKET sock);
+
+	QDir GetCurrentDir();
+	void SetCurrentDir(QDir newDir);
 };
 
 class FTPServer : public QThread
@@ -56,16 +61,22 @@ public:
 				QString serverHomeDir,
 				int serverPort,
 				qint64 serverBitrate);
+	SOCKET GetSock();
 signals:
 	void writeLog(const QString &message);
 	void setFTPServerStatus(bool status);
-	int FTPServerRunning();
 
 public slots:
 	void AbortServer();
 
 private:
 	void run();
+	ClientBase *Accept_new_Client();
+	int FTPServerRunning();
+
+	int ExecCommandOperation(ClientBase *curClient);
+	int ExecFileOperation(ClientBase *curClient);
+
 };
 
 

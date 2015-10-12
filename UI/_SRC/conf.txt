@@ -1,12 +1,11 @@
-ServerPort 1234
-ServerBitrateAccept 1
-ServerBitrate 10000
-ServerHomeDir D:/Work/IP17/Browser UI/_SRC
+ServerPort = 1234
+ServerBitrateAccept = 1
+ServerBitrate = 10000
+ServerHomeDir = F:/4Users/4CraZy/Work/IP17/Browser UI/_SRC
+ServerIP = 127.0.0.1
+ClientPort  = 1234
+ClientBitrateAccept =0
+ClientBitrate =1000
 
-ServerIP 127.0.0.1
-ClientPort 1234
-ClientBitrateAccept 0
-ClientBitrate 1000
-
-DefaultViewer notepad.exe
-UsedViewer -
+DefaultViewer = notepad.exe
+UsedViewer = -

@@ -12,27 +12,19 @@ UI_config::UI_config(const QString &filename) : configfile(filename)
 		pair<QString, QString> confParam;
 		while (!configfile.atEnd())
 		{
-			confPair = QString(configfile.readLine()).trimmed().split(QString("\""));
-			if (confPair.size() == 1) /// no "" in line
-				confPair = confPair[0].split(QString(" "));
-			else
-			{
-				confPair[0] = confPair[0].trimmed();
-				confPair[1] = "\"" + confPair[1] + "\"";
-			}
+			confPair = QString(configfile.readLine()).trimmed().split("=");
+			if (confPair.size() < 2) /// no "" in line
+				continue;
 
-			if ((confPair.size() == 1))
-			{
-				confParam.first = confPair[0];
-				confParam.second = QString("-");
-				data.insert(confParam);
-			}
-			if (confPair.size() > 1)
-			{
-				confParam.first = confPair[0];
-				confParam.second = confPair[1];
-				data.insert(confParam);
-			}
+			confPair[0] = confPair[0].trimmed();
+			confPair[1] = confPair[1].trimmed();
+
+			if ((confPair[1].size() == 0))
+				confPair[1] = QString("-");
+
+			confParam.first = confPair[0];
+			confParam.second = confPair[1];
+			data.insert(confParam);
 		}
 		configfile.close();
 	}
@@ -55,7 +47,7 @@ QString UI_config::getDataValue(const QString &dataname)
 
 void UI_config::setDataToFile(map<QString, QString>::iterator iter, const QString &dataValue)
 {
-	if (configfile.open(QIODevice::ReadOnly | QIODevice::Text))
+	if (configfile.open(QIODevice::ReadOnly))
 	{
 		QString confStream = QString(configfile.readAll());
 		configfile.close();
@@ -69,7 +61,7 @@ void UI_config::setDataToFile(map<QString, QString>::iterator iter, const QStrin
 				confStream.insert(id, dataValue);
 			}
 
-			if (configfile.open(QIODevice::WriteOnly | QIODevice::Text))
+			if (configfile.open(QIODevice::WriteOnly))
 			{
 				configfile.write(confStream.toUtf8());
 				configfile.close();

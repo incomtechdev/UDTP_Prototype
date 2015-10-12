@@ -1,5 +1,6 @@
 #include "FTP_server_thread.h"
 #include "UI.h"
+#include <time.h>
 
 /*
 class ClientBase
@@ -22,34 +23,83 @@ public:
 };
 */
 
-ClientBase::ClientBase()
-{}
-ClientBase::ClientBase(sockaddr_in _clientAddr, SOCKET _clientSock)
+ClientBase::ClientBase() : nextClient(0), prevClient(0), firstClient(this)
+{
+	clientSock = INVALID_SOCKET;
+}
+ClientBase::ClientBase(sockaddr_in _clientAddr, SOCKET _clientSock) : nextClient(0), prevClient(0), firstClient(this)
 {
 	clientAddr = _clientAddr;
 	clientSock = _clientSock;
 }
 ClientBase::~ClientBase()
-{}
+{
+	if (nextClient)
+	{
+		delete nextClient;
+		nextClient = 0;
+	}
+
+}
+
 void ClientBase::SetClientData(sockaddr_in _clientAddr, SOCKET _clientSock)
 {
 	clientAddr = _clientAddr;
 	clientSock = _clientSock;
+
 }
 sockaddr_in ClientBase::GetAddr(){ return clientAddr; }
 
 SOCKET ClientBase::GetSock(){ return clientSock; }
 
-void ClientBase::AddClient(ClientBase *newClient)
+void ClientBase::AddClient(ClientBase *newClient) // add to 2nd position
 {
-	if (base == 0)
-		newClient->firstClient = this;
+	newClient->firstClient = this;
+	ClientBase *secondClient = this->nextClient;
+	this->nextClient = newClient;
+	newClient->nextClient = secondClient;
+	newClient->prevClient = this;
+	secondClient->prevClient = newClient;
 }
 void ClientBase::DeleteClient(ClientBase *delClient)
-{}
+{
+	ClientBase *curClient = this;
+	ClientBase *next = 0, *prev = 0;
+	while (curClient != 0)
+	{
+		if (curClient == delClient)
+		{
+			if (delClient->clientSock > 0)
+				closesocket(delClient->clientSock);
+			next = curClient->nextClient;
+			prev = curClient->prevClient;
+			if (next)
+				next->prevClient = prev;
+			if (prev)
+				prev->nextClient = next;
+			delClient->nextClient = 0;
+			delete delClient;
+			delClient = 0;
+			break;
+		}
+		curClient = curClient->nextClient;
+	}
+}
 ClientBase *ClientBase::FindClientBySock(SOCKET sock)
-{}
+{
+	ClientBase *curClient = this;
+	while (curClient != 0)
+	{
+		if (curClient->GetSock() == sock)
+			return curClient;
+		curClient = curClient->nextClient;
+	}
+	return 0;
+}
 
+
+QDir ClientBase::GetCurrentDir(){ return curDir; }
+void ClientBase::SetCurrentDir(QDir newDir){ curDir = newDir; }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -60,13 +110,17 @@ FTPServer::FTPServer(	UI *_main_thread,
 						main_thread(_main_thread),
 						serverHomeDir(_serverHomeDir),
 						serverPort(_serverPort),
-						serverBitrate(_serverBitrate)
+						serverBitrate(_serverBitrate),
+						clients(0)
 {
 	serverSock = INVALID_SOCKET;
+	serverDir.setCurrent(serverHomeDir);
 
 	connect(this, SIGNAL(writeLog(const QString &)), main_thread, SLOT(WriteLogMessage(const QString &)));
 	connect(this, SIGNAL(setFTPServerStatus(bool)), main_thread, SLOT(SetFTPServerStatus(bool)));
 	connect(main_thread, SIGNAL(abortServer()), this, SLOT(AbortServer()));
+
+	FD_ZERO(&serverSet);
 }
 
 void FTPServer::run()
@@ -100,7 +154,9 @@ void FTPServer::run()
 	else
 		emit writeLog("Server socket created succesfully");
 
-	setsockopt(serverSock, SOL_SOCKET, SO_REUSEADDR, (char *)(1), sizeof (1));
+	u_long iMode = 0;
+	ioctlsocket(serverSock, FIONBIO, &iMode);
+//	setsockopt(serverSock, SOL_SOCKET, SO_REUSEADDR, (char *)(1), sizeof (1));
 
 	// bind and listen socket
 	if (bind(serverSock, (sockaddr *)&serverAddr, sizeof(serverAddr)) == SOCKET_ERROR)
@@ -112,7 +168,7 @@ void FTPServer::run()
 		emit writeLog("Success server binding");
 
 	//Successfull bind, listen for Server requests.
-	if (listen(serverSock, 1) == SOCKET_ERROR)
+	if (listen(serverSock, 5) == SOCKET_ERROR)
 	{
 		emit writeLog("Server listening error");
 		AbortServer();
@@ -134,11 +190,11 @@ void FTPServer::run()
 
 void FTPServer::AbortServer()
 {
-	WSACleanup();
 	if (serverSock > 0)
 		closesocket(serverSock);
 	emit writeLog("Server Aborted");
 	emit setFTPServerStatus(false);
+	WSACleanup();
 }
 
 int FTPServer::FTPServerRunning()
@@ -147,26 +203,15 @@ int FTPServer::FTPServerRunning()
 	timeout.tv_sec = 0;
 	timeout.tv_usec = 1000;
 
-	int err;
+	int i=0, err;
 
 	fd_set read;
 	fd_set write;
 
-	char *fbuffer = 0;
-	uint32 fbuffSize;
-	uint32 bitrate;
-	unsigned int i = 0;
-	Client *curClient = 0;
-	FName f;
-	int actionID = 0;
-	bool rdyState = false;
-	ofstream os;
-	char uploadDir[FILENAME_LENGTH * 2] = "../Uploads/";
-	clock_t tclock;
-	bool isOK;
-	ios::openmode m = ios::out | ios::app | ios::binary;
+	ClientBase *curClient = 0;
+	QString errStr;
 
-	while (data->runner)
+	while (true)
 	{
 
 		FD_ZERO(&read);
@@ -174,240 +219,259 @@ int FTPServer::FTPServerRunning()
 		curClient = 0;
 
 		// Always look for connection attempts
-		FD_SET(data->info.getChannel(CHANNELTYPE::data).sock, &read);
-		for (i = 0; i < data->set.fd_count; i += 1)
+		FD_SET(serverSock, &read);
+		for (i = 0; i < serverSet.fd_count; i += 1)
 		{
-			FD_SET(data->set.fd_array[i], &read);
+			FD_SET(serverSet.fd_array[i], &read);
 		}
 
 		if ((err = select(0, &read, &write, NULL, NULL)) == SOCKET_ERROR)
-		{
-			printf("select() returned with error %d\n", WSAGetLastError());
-			return 1;
-		}
-		else
-			printf("server recieve action:");
-
-		///   accept new client
-		if (FD_ISSET(data->info.getChannel(CHANNELTYPE::data).sock, &read))
-		{
-			err = Accept_new_Client();
-			if (!err)
-				printf(" new client connection failed\n");
 			continue;
-		}
+
 		// read data
-		tclock = clock();
+//		tclock = clock();
 		for (i = 0; i < read.fd_count; i += 1)
 		{
-			curClient = getClientBySocket(read.fd_array[i]);
-			if (!curClient)
-				break;
-
-			char *buf = 0;
-
-			buf = udtp_recv(curClient->info.getChannel(CHANNELTYPE::data), MODE::command);
-
-			if (!buf)
+			if (read.fd_array[i] == serverSock)
 			{
-				disconnectClient(curClient);
-				break;
+				curClient = Accept_new_Client();
+				if (curClient)
+				{
+					emit writeLog("Successfully connected to server");
+					errStr.append(inet_ntoa(curClient->GetAddr().sin_addr));
+					emit writeLog("Client connect to " + errStr);
+				}
 			}
-
-			string bufStr(buf);
-			int tab = bufStr.find(" ");
-			string command = bufStr.substr(0, tab);
-			string commandDir = bufStr.substr(tab + 1);
-			string changeDir(curClient->currentDir);
-			bool accessAccept = true;
-			bool dirNoChanged = false;
-			if (command == "dir")
+			else
 			{
-				printf("server recieve command: %s\n", buf);
-				if (commandDir == "..")
+				curClient = clients->FindClientBySock(read.fd_array[i]);
+				if (!curClient)
+					continue;
+
+				char streamType;
+
+				if (recv(curClient->GetSock(), &streamType, 1, 0) == SOCKET_ERROR)
 				{
-					changeDir = changeDir.substr(0, changeDir.find_last_of("\\"));
-					if (changeDir.find(AccessDir) == string::npos)
+					clients->DeleteClient(curClient);
+					FD_CLR(curClient->GetSock(), &serverSet);
+					continue;
+				}
+
+				if (send(curClient->GetSock(), &streamType, 1, 0) == SOCKET_ERROR)
+				{
+					clients->DeleteClient(curClient);
+					FD_CLR(curClient->GetSock(), &serverSet);
+					continue;
+				}
+
+
+				switch (streamType)
+				{
+				case 1:				/////  COMMAND
+					if (ExecCommandOperation(curClient) == SOCKET_ERROR)
 					{
-						accessAccept = false;
-						changeDir = AccessDir;
+						clients->DeleteClient(curClient);
+						FD_CLR(curClient->GetSock(), &serverSet);
 					}
+					break;
 
-				}
-				else if (commandDir == ".")
-					dirNoChanged = true;
-				else
-					changeDir = changeDir + "\\" + commandDir;
+				case 2:				/////  FILE
+					emit writeLog("Server recieve file action");
+					if (ExecFileOperation(curClient) == SOCKET_ERROR)
+					{
+						clients->DeleteClient(curClient);
+						FD_CLR(curClient->GetSock(), &serverSet);
+					}
+					break;
 
-				char *flist = 0;
-
-				if (dirNoChanged)
-				{
-					flist = new char[2];
-					flist[0] = 2;
-					flist[1] = '\0';
-				}
-				if ((flist = getDirFiles(changeDir.c_str())) == 0)
-				{
-					changeDir.assign(curClient->currentDir);
-					flist = new char[2];
-					flist[0] = 1;
-					flist[1] = '\0';
-				}
-
-				if (!accessAccept)
-				{
-					delete[] flist;
-					flist = new char[2];
-					flist[0] = 0;
-					flist[1] = '\0';
-				}
-
-				dbug = udtp_send(curClient->info.getChannel(CHANNELTYPE::data), MODE::stream, flist, strlen(flist) + 1);
-				if (dbug == SOCKET_ERROR)
-				{
-					disconnectClient(curClient);
+				default:
 					break;
 				}
-
-				if (flist)
-					delete[] flist;
-				strcpy(curClient->currentDir, changeDir.c_str());
 			}
-
-			delete[] buf;
-			/*			else if (curClient->status == 1)
-			{
-			// header is reading
-			rdyState = false;
-			dbug = recv(curClient->info.sourceAddr.sock, (char*)&f, sizeof(FName), 0);
-			if (dbug <= 0)
-			{
-			disconnectClient(curClient);
-			break;
-			}
-			cout << f.getFullPath() << endl;
-
-			strcpy(curClient->file.dirPath, f.dirPath);
-			strcpy(curClient->file.fileName, f.fileName);
-
-			curClient->file.setDir(uploadDir);
-			rdyState = true;
-			//	char * rdyState = "download";
-			dbug = send(curClient->info.sourceAddr.sock, (char*)&rdyState, sizeof(rdyState), 0);
-			if (dbug <= 0)
-			{
-			disconnectClient(curClient);
-			break;
-			}
-			if (file_exists(curClient->file.getFullPath()))
-			m = ios::out | ios::trunc | ios::binary;
-			else
-			m = ios::out | ios::app | ios::binary;
-			curClient->status = 2; // client is ready for download
-			printf(" file name send\n");
-
-			}
-			else if (curClient->status == 2)
-			{
-			// ready for download
-			if (!os.is_open())
-			os.close();
-
-			os.open(curClient->file.getFullPath(), m);
-
-			fbuffSize = sizeof(char)*curClient->info.bit + sizeof(transportData);
-			fbuffer = (char*)malloc(fbuffSize);
-			dbug = recv(curClient->info.sourceAddr.sock, fbuffer, fbuffSize, 0);
-			if (dbug <= 0)
-			{
-			os.close();
-			disconnectClient(curClient);
-			free(fbuffer);
-			break;
-			}
-
-			bitrate = curClient->info.bit;
-			if (fbuffer[0] != 0)
-			{
-			bitrate = 0;
-			for (i = 0; i < sizeof(uint32); i++)
-			bitrate = (bitrate >> 8) + fbuffer[i+1];
-			}
-			os.write(fbuffer+sizeof(transportData), bitrate);
-
-			printf(" %d bytes transfer\n", bitrate);
-
-			if (bitrate < curClient->info.bit)
-			{
-			isOK = true;
-			printf(" End transfer\n");
-			dbug = send(curClient->info.sourceAddr.sock, (char*)&isOK, sizeof(bool), 0);
-			isOK = false;
-			curClient->status = 0;
-			}
-			os.close();
-			m = ios::out | ios::app | ios::binary;
-			free(fbuffer);
-			}
-			else
-			printf(" action failed\n");*/
 		}
-		tclock = clock() - tclock;
-		Sleep(1000 - ((float)tclock) / CLOCKS_PER_SEC);
+//		tclock = clock() - tclock;
+//		Sleep(1000 - ((float)tclock) / CLOCKS_PER_SEC);
 
 	}
 
 	return 0;
 }
 
-Client *FtpServer::getClientBySocket(SOCKET sock)
+ClientBase *FTPServer::Accept_new_Client()
 {
-	Client *curCli = data->nextCli;
-
-	while (curCli)
-	{
-		if (curCli->info.getChannel(CHANNELTYPE::data).sock == sock
-			|| curCli->info.getChannel(CHANNELTYPE::control).sock == sock
-			|| curCli->info.getChannel(CHANNELTYPE::error).sock == sock
-			|| curCli->info.getChannel(CHANNELTYPE::status).sock == sock)
-			return curCli;
-		curCli = curCli->nextCli;
-	}
-	return 0;
-}
-
-int FtpServer::Accept_new_Client()
-{
-	///accept new client
-	Client *newClient = (Client *)malloc(sizeof(Client));
-	newClient->init();
-
-	NETID *newClientData = udtp_accept(0, &data->info, 0, 0, 0, 0, 0);
-
-	if (newClientData == 0)
-	{
-		free(newClient);
+	sockaddr_in newAddr;
+	int addrLength;
+	SOCKET newSock = accept(serverSock, (sockaddr*)&newAddr, &addrLength);
+	if (newSock == INVALID_SOCKET)
 		return 0;
+
+	char isOK = 1;
+	if (send(newSock, &isOK, 1, 0) == SOCKET_ERROR)
+	{
+		return 0 ;
 	}
 
-	newClient->info = *newClientData;
-	free(newClientData);
+	///accept new client
+	ClientBase *newClient = new ClientBase(newAddr, newSock);
+	newClient->SetCurrentDir(serverHomeDir);
+	if (clients == 0)
+		clients = newClient;
+	else
+		clients->AddClient(newClient);
 
-	newClient->conn = true;
-	newClient->runner = true;
-	strcpy(newClient->currentDir, AccessDir.c_str());
-	updateStatus(CLIENT_CONN);
+	FD_SET(newClient->GetSock(), &serverSet);
 
-	if (data->nextCli)
-		data->nextCli->prevCli = newClient;
-	newClient->nextCli = data->nextCli;
-	newClient->prevCli = data;
-	data->nextCli = newClient;
-	FD_SET(newClient->info.getChannel(CHANNELTYPE::data).sock, &data->set);
-	FD_SET(newClient->info.getChannel(CHANNELTYPE::control).sock, &data->set);
-	FD_SET(newClient->info.getChannel(CHANNELTYPE::error).sock, &data->set);
-	FD_SET(newClient->info.getChannel(CHANNELTYPE::status).sock, &data->set);
+/*	char isOK = 1;
+	if (send(newClient->GetSock(), &isOK, 1, 0) == SOCKET_ERROR)
+	{
+		clients->DeleteClient(newClient);
+		newClient = 0;
+	}*/
 
-	return 1;
+	return newClient;
 }
+
+int FTPServer::ExecCommandOperation(ClientBase *curClient)
+{
+
+	char isOK = 1;
+	const int commandLength = 1000;
+	string strFSeq;
+	char *fileSequence = 0;
+	int fileSequenceLength = 1;
+	int i = 0;
+	ulong lFileSize;
+	char command[commandLength];
+	memset(command, 0, 1000);
+
+	if (recv(curClient->GetSock(), command, commandLength, 0) == SOCKET_ERROR)
+		return SOCKET_ERROR;
+
+	if (send(curClient->GetSock(), &isOK, 1, 0) == SOCKET_ERROR)
+		return SOCKET_ERROR;
+
+	QString cmdStr(command);
+	QStringList cmdStrList = cmdStr.split(" ");
+	QString cmd(cmdStrList[0]);
+	QString cmdArgs(cmdStrList[1]);
+	QDir chDir = curClient->GetCurrentDir();
+	QFileInfo checkFile;
+	QString strSequence;
+
+	bool accessAccept = true;
+	bool dirNoChanged = false;
+	if (cmd == "dir")
+	{
+		emit writeLog("Server recieve command action: " + cmdStr);
+		if (cmdArgs == "..")
+		{
+			if (serverDir == curClient->GetCurrentDir())
+			{
+				emit writeLog("Can't change dir up to home dir. Access denied");
+				fileSequenceLength = 0;
+			}
+			else
+			{
+				chDir.cdUp();
+				curClient->SetCurrentDir(chDir);
+			}
+		}
+		else if (cmdArgs == ".")
+			fileSequenceLength = 1;
+		else
+		{
+			if(chDir.cd(cmdArgs))
+				curClient->SetCurrentDir(chDir);
+			else
+				fileSequenceLength = 0;
+		}
+
+		string sDir = chDir.absolutePath().toStdString();
+		char *cDir = (char*)(sDir.c_str());
+		if (send(curClient->GetSock(), (char*)(sDir.c_str()), MAX_PATH, 0) == SOCKET_ERROR)
+			return SOCKET_ERROR;
+
+		if (recv(curClient->GetSock(), &isOK, 1, 0) == SOCKET_ERROR)
+			return SOCKET_ERROR;
+
+		if (fileSequenceLength == 0)
+		{
+			strFSeq = "\0";
+			fileSequenceLength = 1;
+		}
+		else
+		{
+			cmdStrList = chDir.entryList();
+			QString sFSize;
+
+			for (i = 0; i < cmdStrList.size(); i++)
+			{
+				sFSize.clear();
+				checkFile.setFile(chDir, cmdStrList[i]);
+				if (cmdStrList[i] == ".")
+				{
+					strSequence += "0:";
+					sFSize = "DIR";
+				}
+				else if (cmdStrList[i] == "..")
+				{
+					strSequence += "1:";
+					sFSize = "DIR";
+				}
+				else if (checkFile.isDir())
+				{
+					strSequence += "2:";
+					sFSize = "DIR";
+				}
+				else if (checkFile.isFile())
+				{
+					strSequence += "3:";
+					lFileSize = checkFile.size();
+					sFSize.setNum(lFileSize);
+				}
+				else
+				{
+					strSequence += "4:";
+					sFSize = "UNKNOWN";
+				}
+
+				strSequence += cmdStrList[i] + ":" + sFSize + "\"";
+			}
+			strFSeq = strSequence.toStdString();
+		}
+
+		fileSequenceLength = strSequence.size();
+		char sfileSequenceLength[4];
+		memcpy(sfileSequenceLength, &fileSequenceLength, 4);
+
+		if (send(curClient->GetSock(), sfileSequenceLength, 4, 0) == SOCKET_ERROR)
+		{
+			emit writeLog("Operation aborted due to socket error");
+			return SOCKET_ERROR;
+		}
+
+		if (recv(curClient->GetSock(), &isOK, 1, 0) == SOCKET_ERROR)
+		{
+			emit writeLog("Operation aborted due to socket error");
+			return SOCKET_ERROR;
+		}
+
+		fileSequence = (char*)strFSeq.c_str();
+		if (send(curClient->GetSock(), fileSequence, fileSequenceLength, 0) == SOCKET_ERROR)
+			return SOCKET_ERROR;
+
+		if (recv(curClient->GetSock(), &isOK, 1, 0) == SOCKET_ERROR)
+			return SOCKET_ERROR;
+
+		emit writeLog("Command executed successfully");
+	}
+
+	return 0;
+}
+
+int FTPServer::ExecFileOperation(ClientBase *curClient)
+{
+	return SOCKET_ERROR;
+}
+
+SOCKET FTPServer::GetSock(){ return serverSock; }
