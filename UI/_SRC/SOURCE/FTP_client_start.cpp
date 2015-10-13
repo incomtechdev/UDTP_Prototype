@@ -1,16 +1,6 @@
 #include "FTP_client_start.h"
 #include "UI.h"
 
-int _connect(
-	_In_ SOCKET                *s,
-	_In_ const struct sockaddr *name,
-	_In_ int                   namelen
-	)
-{
-	return connect(*s, name, namelen);
-}
-
-
 FTP_Client_Start_dialog::FTP_Client_Start_dialog(UI *_mainWnd) :QDialog(_mainWnd), mainWnd(_mainWnd)
 {
 	ui.setupUi(this);
@@ -99,7 +89,8 @@ void UI::FTP_Client_Running()
 
 	FTPClientRun = true;
 
-	setsockopt(clientData->sock, SOL_SOCKET, SO_REUSEADDR, (char *)(1), sizeof (1));
+	ulong a = 0;
+	ioctlsocket(clientData->sock, FIONBIO, &a);
 
 //// coonect to server
 	if (Connect_Client() == SOCKET_ERROR)

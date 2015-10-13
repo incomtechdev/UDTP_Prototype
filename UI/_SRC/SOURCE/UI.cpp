@@ -81,10 +81,14 @@ UI::UI(QWidget *parent) :   QMainWindow(parent),
 	SetWorkingLeftPanel(ui.left_tableWidget->item(0, 0));
 
 	if (WSAStartup(0x0202, &wsaData) != 0)
+	{
 		WriteLogMessage("Error in starting WSAStartup()");
+		WSACleanup();
+	}
 
 	QString udtp_dll_path = config_data.getDataValue("UDTPdllPath");
-	dllHandle = LoadLibrary(udtp_dll_path.toStdWString().c_str());
+	LPCWSTR dllLibName = (const wchar_t*)udtp_dll_path.utf16();
+	dllHandle = LoadLibrary(dllLibName);
 }
 
 UI::~UI()
@@ -412,6 +416,10 @@ void UI::CopyClientToFTP()
 
 void UI::StartFTPServer(bool checked)
 {
+	QIcon icon1, icon2;
+	icon1.addFile(QString::fromUtf8(":/icons/icon/Home-Server-icon_off.png"), QSize(), QIcon::Normal, QIcon::Off);
+	icon2.addFile(QString::fromUtf8(":/icons/icon/Home-Server-icon_on.png"), QSize(), QIcon::Normal, QIcon::Off);
+
 	if (!FTPServerRun)
 	{
 		QString strHomeDir = config_data.getDataValue("ServerHomeDir");
@@ -423,27 +431,43 @@ void UI::StartFTPServer(bool checked)
 										config_data.getDataValue("ServerPort").toShort(),
 										config_data.getDataValue("ServerBitrate").toLong());
 		serverThread->start();
+		ui.action_ToolServerStarted->setIcon(icon2);
 	}
 	else
 	{
 		if (serverThread)
 			emit abortServer();
+
+		ui.action_ToolServerStarted->setIcon(icon1);
 	}
 
 }
 
 void UI::StartFTPClient(bool checked)
 {
+	QIcon icon1, icon2;
+	icon1.addFile(QString::fromUtf8(":/icons/icon/right.png"), QSize(), QIcon::Normal, QIcon::Off);
+	icon2.addFile(QString::fromUtf8(":/icons/icon/forward_button.png"), QSize(), QIcon::Normal, QIcon::Off);
+
 	if (!FTPClientRun)
 	{
 		FTP_Client_Start_dialog	client_start_dialog(this);
 		if (client_start_dialog.exec() == true)
+		{
 			FTP_Client_Running();
+			ui.action_ToolClientConnected->setIcon(icon1);
+		}
 		else
+		{
 			AbortClient();
+			ui.action_ToolClientConnected->setIcon(icon2);
+		}
 	}
 	else
+	{
 		AbortClient();
+		ui.action_ToolClientConnected->setIcon(icon2);
+	}
 }
 
 void UI::SetFTPServerStatus(bool status)
@@ -453,7 +477,7 @@ void UI::SetFTPServerStatus(bool status)
 	{
 		if (serverThread)
 		{
-			serverThread->terminate();
+//			serverThread->terminate();
 			delete serverThread;
 			serverThread = 0;
 		}

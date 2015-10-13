@@ -1,7 +1,17 @@
-#include "udtp.h"
-#include "UI.h"
+#pragma comment(lib,"Ws2_32.lib")
 #include "FTP_server_thread.h"
 #include "FTP_client_start.h"
+#include "UI.h"
+#include "udtp.h"
+
+int _connect(
+	_In_ SOCKET                *s,
+	_In_ const struct sockaddr *name,
+	_In_ int                   namelen
+	)
+{
+	return connect(*s, name, namelen);
+}
 
 /*
 uint32 udtp_BitRate(PUDTP_CONNECTION *conn);			//задать значение скорости передачи;
@@ -41,24 +51,24 @@ ClientBase *FTPServer::Accept_new_Client()
 {
 	sockaddr_in newAddr;
 	int addrLength;
+	SOCKET newSock = 0;
 
-	PUDTP_CHANEL *ch;
-	PUDTP_CONNECTION *conn;
-	SOCKET newSock;
+	PUDTP_CHANEL *ch = 0;
+	PUDTP_CONNECTION *conn = 0;
 
-	bool isFindFunc = false;
+	bool isDLLFindFunc = false;
 	if (main_thread->GetDLLHandle() != NULL)
 	{
 		UDTP_OPERATION udtp_Accept = (UDTP_OPERATION)GetProcAddress(main_thread->GetDLLHandle(), "udtp_Accept");
 
-		if (isFindFunc = (udtp_Accept != NULL))
+		if (isDLLFindFunc = (udtp_Accept != NULL))
 		{
 			if (udtp_Accept(ch, conn) == SOCKET_ERROR)
 				return 0;
 		}
 	}
 
-	if (!isFindFunc)
+	if (!isDLLFindFunc)
 	{
 		newSock = accept(serverSock, (sockaddr*)&newAddr, &addrLength);
 		if (newSock == INVALID_SOCKET)
@@ -68,6 +78,7 @@ ClientBase *FTPServer::Accept_new_Client()
 		if (send(newSock, &isOK, 1, 0) == SOCKET_ERROR)
 			return 0;
 	}
+
 	///accept new client
 	ClientBase *newClient = new ClientBase(newAddr, newSock);
 	newClient->SetCurrentDir(serverHomeDir);
@@ -229,6 +240,7 @@ int FTPServer::ExecFileOperation(ClientBase *curClient)
 //////////////////////////////////////////////////////////////////////////////////////
 int UI::Connect_Client()
 {
+
 	if (_connect(&clientData->sock, (sockaddr*)(&clientData->addr), sizeof(clientData->addr)) == SOCKET_ERROR)
 		return SOCKET_ERROR;
 
@@ -245,6 +257,9 @@ int UI::ExecFTPCommand(const QString &command)
 	char isOK = 1;
 	const char commandMark = 1;
 	char sfileSequenceLength[4];
+
+	ulong a = 0;
+	ioctlsocket(clientData->sock, FIONBIO, &a);
 
 	if (send(clientData->sock, &commandMark, 1, 0) == SOCKET_ERROR)
 	{

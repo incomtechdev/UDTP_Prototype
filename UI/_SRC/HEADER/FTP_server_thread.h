@@ -50,6 +50,8 @@ private:
 	ClientBase *clients;
 	fd_set serverSet;			//used to check if there is data in the socket
 
+	bool isRunning;
+
 
 	void AddClient(ClientBase *newClient);
 	void DeleteClient(ClientBase *delClient);
@@ -59,6 +61,8 @@ public:
 				QString serverHomeDir,
 				int serverPort,
 				qint64 serverBitrate);
+	~FTPServer();
+
 	SOCKET GetSock();
 	fd_set *GetSet();
 signals:

@@ -30,7 +30,7 @@ ClientBase::ClientBase() : nextClient(0), prevClient(0)
 ClientBase::ClientBase(	sockaddr_in _clientAddr, 
 						SOCKET _clientSock) : 
 						nextClient(0),
-						prevClient(0) 
+						prevClient(0)
 {
 	clientAddr = _clientAddr;
 	clientSock = _clientSock;
@@ -81,7 +81,8 @@ FTPServer::FTPServer(	UI *_main_thread,
 						serverHomeDir(_serverHomeDir),
 						serverPort(_serverPort),
 						serverBitrate(_serverBitrate),
-						clients(0)
+						clients(0),
+						isRunning(false)
 {
 	serverSock = INVALID_SOCKET;
 
@@ -90,6 +91,10 @@ FTPServer::FTPServer(	UI *_main_thread,
 	connect(main_thread, SIGNAL(abortServer()), this, SLOT(AbortServer()));
 
 	FD_ZERO(&serverSet);
+}
+
+FTPServer::~FTPServer()
+{
 }
 
 void FTPServer::run()
@@ -117,8 +122,6 @@ void FTPServer::run()
 	else
 		emit writeLog("Server socket created succesfully");
 
-//	u_long iMode = 0;
-//	ioctlsocket(serverSock, FIONBIO, &iMode);
 	setsockopt(serverSock, SOL_SOCKET, SO_REUSEADDR, (char *)(1), sizeof (1));
 
 	// bind and listen socket
@@ -131,13 +134,16 @@ void FTPServer::run()
 		emit writeLog("Success server binding");
 
 	//Successfull bind, listen for Server requests.
-	if (listen(serverSock, 5) == SOCKET_ERROR)
+	if (listen(serverSock, 1) == SOCKET_ERROR)
 	{
 		emit writeLog("Server listening error");
 		AbortServer();
 	}
 	else
 		emit writeLog("Success server listening");
+
+	ulong a = 0;
+	ioctlsocket(serverSock, FIONBIO, &a);
 
 	QString port;
 	port.setNum(serverPort);
@@ -147,16 +153,31 @@ void FTPServer::run()
 
 	emit setFTPServerStatus(true);
 
+	isRunning = true;
+
 	FTPServerRunning();
 
+
+	emit setFTPServerStatus(false);
 }
 
 void FTPServer::AbortServer()
 {
 	if (serverSock > 0)
 		closesocket(serverSock);
+
+	ClientBase *cli = clients;
+	while (cli != 0)
+	{
+		if (cli->clientSock > 0)
+			closesocket(cli->clientSock);
+		cli = cli->nextClient;
+	}
+	delete clients;
+	clients = 0;
+
 	emit writeLog("Server Aborted");
-	emit setFTPServerStatus(false);
+	isRunning = false;
 }
 
 int FTPServer::FTPServerRunning()
@@ -173,7 +194,7 @@ int FTPServer::FTPServerRunning()
 	ClientBase *curClient = 0;
 	QString errStr;
 
-	while (true)
+	while (isRunning)
 	{
 
 		FD_ZERO(&read);
@@ -187,7 +208,8 @@ int FTPServer::FTPServerRunning()
 
 		if ((err = select(0, &read, &write, NULL, NULL)) == SOCKET_ERROR)
 		{
-			return SOCKET_ERROR;
+			isRunning = false;
+			continue;
 		}
 
 		// read data
@@ -196,11 +218,14 @@ int FTPServer::FTPServerRunning()
 		{
 			if (read.fd_array[i] == serverSock)
 			{
+				ulong a = 0;
+				ioctlsocket(serverSock, FIONBIO, &a);
+
 				curClient = Accept_new_Client();
 				if (curClient)
 				{
 					emit writeLog("Successfully connected to server");
-					errStr.append(inet_ntoa(curClient->GetAddr().sin_addr));
+					errStr = inet_ntoa(curClient->GetAddr().sin_addr);
 					emit writeLog("Client connect to " + errStr);
 				}
 			}
@@ -441,6 +466,9 @@ void FTPServer::AddClient(ClientBase *newClient) // add to 2nd position
 		secondClient->prevClient = newClient;
 	clients = newClient;
 	newClient->nextClient = secondClient;
+
+	ulong a = 0;
+	ioctlsocket(newClient->clientSock, FIONBIO, &a);
 }
 
 void FTPServer::DeleteClient(ClientBase *delClient)

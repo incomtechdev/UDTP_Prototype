@@ -15,7 +15,7 @@
   </property>
   <property name="windowIcon">
    <iconset>
-    <normaloff>icon/Home-Server-icon.png</normaloff>icon/Home-Server-icon.png</iconset>
+    <normaloff>../../icon/Home-Server-icon.png</normaloff>../../icon/Home-Server-icon.png</iconset>
   </property>
   <widget class="QWidget" name="centralwidget">
    <layout class="QGridLayout" name="gridLayout">
@@ -450,7 +450,7 @@
      <x>0</x>
      <y>0</y>
      <width>638</width>
-     <height>21</height>
+     <height>18</height>
     </rect>
    </property>
    <widget class="QMenu" name="menuFTP_Server">
@@ -505,7 +505,7 @@
   </action>
   <action name="action_MenuServerOptions">
    <property name="text">
-    <string>Server Options...</string>
+    <string>Connection Options...</string>
    </property>
   </action>
   <action name="action_MenuClientConnected">
@@ -520,8 +520,8 @@
   </action>
   <action name="action_ToolServerStarted">
    <property name="icon">
-    <iconset resource="iconres.qrc">
-     <normaloff>:/icons/icon/Home-Server-icon.png</normaloff>:/icons/icon/Home-Server-icon.png</iconset>
+    <iconset resource="../RESOURCE/iconres.qrc">
+     <normaloff>:/icons/icon/Home-Server-icon_off.png</normaloff>:/icons/icon/Home-Server-icon_off.png</iconset>
    </property>
    <property name="text">
     <string>FTP Server Started</string>
@@ -532,8 +532,8 @@
   </action>
   <action name="action_ToolClientConnected">
    <property name="icon">
-    <iconset resource="iconres.qrc">
-     <normaloff>:/icons/icon/right.png</normaloff>:/icons/icon/right.png</iconset>
+    <iconset resource="../../iconres.qrc">
+     <normaloff>:/icons/icon/forward_button.png</normaloff>:/icons/icon/forward_button.png</iconset>
    </property>
    <property name="text">
     <string>Client Connected</string>
@@ -549,7 +549,8 @@
   </action>
  </widget>
  <resources>
-  <include location="iconres.qrc"/>
+  <include location="../../iconres.qrc"/>
+  <include location="../RESOURCE/iconres.qrc"/>
  </resources>
  <connections/>
 </ui>
