@@ -10,6 +10,8 @@
 #include <winsock2.h>
 #include <windows.h>
 
+using namespace std;
+
 int _connect(
 	_In_ SOCKET                *s,
 	_In_ const struct sockaddr *name,
@@ -47,6 +49,9 @@ public:
 signals:
 	void deleteUdtp_thread();
 	int acceptClient(SocketData *data);
+	int fillServerData(char *buf, int len);
+	int getStringFromServer(char *buf, int len);
+
 	void lockClientConnection(bool isLock);
 
 public slots:
@@ -62,14 +67,15 @@ private:
 
 	WSADATA data;
 
+	QString str;
+
 	SocketData *server;
 	SocketData *client;
-
-	Udtp_thread *eventThread;
 
 	bool isClientLock;
 public:
 	QWaitCondition cond;
+	Udtp_thread *eventThread;
 
 	QUdtpSocket(int threadID);
 	~QUdtpSocket();
@@ -77,7 +83,9 @@ public:
 	int closeServerSocket();
 	int createClientSocket(SocketData *data);
 
-	int connectSocket();
+	int connectToServer();
+	int sendToServer(char *str, int len);
+	int recvFromServer(char *str, int len);
 
 	SocketData *getServer();
 	SocketData *getClient();
@@ -87,6 +95,9 @@ signals:
 public slots:
 	void deleteUdtp_thread();
 	int acceptClient(SocketData *data);
+	int fillServerData(char *buf, int len);
+	int getStringFromServer(char *buf, int len);
+
 	void lockClientConnection(bool isLock);
 };
 
@@ -97,83 +108,31 @@ class serverThread :public QThread
 public:
 	QUdtpSocket serv;
 
-	serverThread(int ind) :serv(ind){}
+	serverThread(SocketData *addr) :serv(0)
+	{
+		serv.createServerSocket(addr);
+	}
 
 	void run()
 	{
-		SocketData servAddr;
-		servAddr.addr.sin_addr.s_addr = inet_addr("127.0.0.1");
-		servAddr.addr.sin_port = htons(10000);
-
-		serv.createServerSocket(&servAddr);
-
 		this->exec();
 	}
 };
 
-/*
-class ClientBase
-{
-public:
-	short port;
-	sockaddr_in addr;
-	SOCKET sock;
-	ClientBase *nextClient;
-	ClientBase *prevClient;
-
-	ClientBase();
-	ClientBase(short port, sockaddr_in _addr, SOCKET _sock);
-	~ClientBase();
-
-	void SetRealPort(short _port);
-	short getRealPort();
-
-	void SetAddr(sockaddr_in _addr);
-	sockaddr_in GetAddr();
-
-	void SetSock(SOCKET _sock);
-	SOCKET GetSock();
-
-};
-
-class serverThread : public QThread
+class clientThread :public QThread
 {
 	Q_OBJECT
 
-private:
-	UI *parentThread;
-
-	ClientBase serverData;
-	ClientBase *clientData;
-
-	fd_set serverSet;			//used to check if there is data in the socket
-
-	bool running;
-
-	void AddClient(ClientBase *newClient);
-	void DeleteClient(ClientBase *delClient);
-	ClientBase *FindClientBySock(SOCKET sock);
-
 public:
-	serverThread(UI *_parent);
-	~serverThread();
+	QUdtpSocket cli;
 
-	ClientBase *GetServerData();
-	fd_set *GetSet();
+	clientThread(SocketData *addr) :cli(0)
+	{
+		cli.createClientSocket(addr);
+	}
 
-
-signals:
-
-public slots :
-	void CreateServerSocket(ClientBase *_data);
-
-private:
 	void run();
-
 };
-*/
-
-
 
 
 #endif
