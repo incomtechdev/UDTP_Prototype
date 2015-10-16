@@ -3,6 +3,9 @@
 
 int WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, char*, int nShowCmd)
 {
+	WSADATA data;
+	if (WSAStartup(0x0202, &data) != 0)
+		WSACleanup();
 
 	SocketData servAddr;
 	servAddr.addr.sin_addr.s_addr = inet_addr("127.0.0.1");
@@ -11,7 +14,8 @@ int WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, char*, int nShowCmd)
 	int argc = 0;
 	QApplication app(argc, 0);
 
-	serverThread *newserver = new serverThread(&servAddr);
+	const int MAX_BITRATE = 100;
+	serverThread *newserver = new serverThread(&servAddr, MAX_BITRATE);
 	newserver->start();
 
 	clientThread *newclient = new clientThread(&servAddr);
@@ -27,36 +31,54 @@ void clientThread::run()
 
 	cli.connectToServer();
 
+	Sleep(2000);
 	int a = 0;
 
-	char *str1 = "this is a test";
-	cli.sendToServer(str1, 10);
-	cli.sendToServer(str1 + 5, 6);
+	char *str1 = "this is a test: rwerwerqwefddfghrtgrtggef  erferterfefwerwetregefvfdseferfr fgegegerferfefergergegtgtg htyhyhrthrtgrgererthgfhg efgetgrtyrtgfgdfewrer hrthrtyrgdfgdrgergrthrht df    12345";
+	cli.sendToServer(str1, strlen(str1)+1);
+
 	char str[20];
 	cli.recvFromServer(str, 20);
 	this->exec();
 }
 
-int QUdtpSocket::fillServerData(char *buf, int len)
+int QUdtpSocket::acceptClient(SocketData *data)
 {
-	str.append(buf);
-	str.append(" :: ");
 
-	cond.wakeAll();
+	client = new SocketData;
+
+	client->sock = data->sock;
+	client->addr.sin_family = data->addr.sin_family;
+	client->addr.sin_port = data->addr.sin_port;
+	client->addr.sin_addr.s_addr = data->addr.sin_addr.s_addr;
+
+
+	client->bitrate = DESCRIPTOR_LENGTH;
+	client->isReadDescriptor = false;
 
 	return 0;
 }
 
-int QUdtpSocket::getStringFromServer(char *buf, int len)
+
+int QUdtpSocket::fillServerData(char *buf, int len)
 {
-	memset(buf, 0, len);
+	char *cStr = new char[len + 1];
+	cStr[len] = '\0';
+	strncpy(cStr, buf, len);
+	str.append(cStr);
+	str.append(" :: ");
+
+	delete cStr;
+	return 0;
+}
+
+int QUdtpSocket::getStringFromServer(SocketData *cli, char *buf)
+{
+	memset(buf, 0, cli->bitrate);
 	string bstr(str.toUtf8().constData());
 	int size = bstr.size();
-	if (size < len)
-		len = size;
-	memcpy(buf, bstr.c_str(), len);
 
-	cond.wakeAll();
+	memcpy(buf, bstr.c_str() + cli->bytessend, cli->bitrate);
 
 	return 0;
 }

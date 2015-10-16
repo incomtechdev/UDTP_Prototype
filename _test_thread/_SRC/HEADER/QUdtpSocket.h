@@ -12,6 +12,8 @@
 
 using namespace std;
 
+#define DESCRIPTOR_LENGTH 5
+
 int _connect(
 	_In_ SOCKET                *s,
 	_In_ const struct sockaddr *name,
@@ -23,8 +25,13 @@ class QUdtpSocket;
 class SocketData
 {
 public:
-	sockaddr_in addr;
 	SOCKET sock;
+	sockaddr_in addr;
+	int bitrate;
+	bool isReadDescriptor;
+	int bytessend;
+	int bytesrest;
+	int direction;
 };
 
 class Udtp_thread :public QThread
@@ -32,9 +39,10 @@ class Udtp_thread :public QThread
 	Q_OBJECT
 
 public:
+	fd_set read, write, err;
+
 	int threadID;
 
-	QMutex mutex;
 	QUdtpSocket *parent;
 	bool isRunning;
 
@@ -50,12 +58,12 @@ signals:
 	void deleteUdtp_thread();
 	int acceptClient(SocketData *data);
 	int fillServerData(char *buf, int len);
-	int getStringFromServer(char *buf, int len);
-
+	int execSocketActivity(fd_set *read, fd_set *write, fd_set *err);
 	void lockClientConnection(bool isLock);
 
 public slots:
 	void setRunning(bool run);
+	int waitForSocketActivity();
 
 };
 
@@ -65,38 +73,43 @@ class QUdtpSocket: public QObject
 
 private:
 
-	WSADATA data;
-
 	QString str;
 
 	SocketData *server;
 	SocketData *client;
 
 	bool isClientLock;
+	int maxBitrate;
 public:
-	QWaitCondition cond;
 	Udtp_thread *eventThread;
 
 	QUdtpSocket(int threadID);
 	~QUdtpSocket();
-	int createServerSocket(SocketData *data);
+	int createServerSocket(SocketData *data, int bitrate);
 	int closeServerSocket();
 	int createClientSocket(SocketData *data);
 
 	int connectToServer();
 	int sendToServer(char *str, int len);
 	int recvFromServer(char *str, int len);
+	int getBitrate();
+	int manageDescriptor(SocketData *cli, char *bytes);
+	int	manageBytesTransfer(SocketData *cli, char *bytes, int byteslen);
 
 	SocketData *getServer();
 	SocketData *getClient();
+	SocketData * getClientBySocket(SOCKET sock);
+	int getStringFromServer(SocketData *cli, char *buf);
+
 signals:
 	void setRunning(bool run);
+	int waitForSocketActivity();
 
 public slots:
 	void deleteUdtp_thread();
 	int acceptClient(SocketData *data);
 	int fillServerData(char *buf, int len);
-	int getStringFromServer(char *buf, int len);
+	int execSocketActivity(fd_set *read, fd_set *write, fd_set *err);
 
 	void lockClientConnection(bool isLock);
 };
@@ -108,9 +121,9 @@ class serverThread :public QThread
 public:
 	QUdtpSocket serv;
 
-	serverThread(SocketData *addr) :serv(0)
+	serverThread(SocketData *addr, int bitrate) :serv(0)
 	{
-		serv.createServerSocket(addr);
+		serv.createServerSocket(addr, bitrate);
 	}
 
 	void run()
