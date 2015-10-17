@@ -4,7 +4,6 @@
 #pragma comment(lib,"Ws2_32.lib")
 #include <QThread>
 #include <QFile>
-#include <QMutex>
 #include <QWaitCondition>
 #include <QDir>
 #include <winsock2.h>
@@ -13,6 +12,7 @@
 using namespace std;
 
 #define DESCRIPTOR_LENGTH 5
+#define SERVER_CHANNELS_BEGIN 2000
 
 int _connect(
 	_In_ SOCKET                *s,
@@ -32,6 +32,14 @@ public:
 	int bytessend;
 	int bytesrest;
 	int direction;
+
+	SocketData() : bitrate(0), sock(0), isReadDescriptor(false), bytesrest(0), bytessend(0), direction(0)
+	{
+		addr.sin_addr.s_addr = 0;
+		addr.sin_family = 0;
+		addr.sin_port = 0;
+		memset(addr.sin_zero, 0, 8);
+	}
 };
 
 class Udtp_thread :public QThread
@@ -56,7 +64,6 @@ public:
 
 signals:
 	void deleteUdtp_thread();
-	int acceptClient(SocketData *data);
 	int fillServerData(char *buf, int len);
 	int execSocketActivity(fd_set *read, fd_set *write, fd_set *err);
 	void lockClientConnection(bool isLock);
@@ -67,6 +74,9 @@ public slots:
 
 };
 
+typedef map<SOCKET, SocketData*> clientBase;
+typedef pair<SOCKET, SocketData*> clientBasePair;
+
 class QUdtpSocket: public QObject
 {
 	Q_OBJECT
@@ -75,20 +85,24 @@ private:
 
 	QString str;
 
-	SocketData *server;
-	SocketData *client;
+	clientBase servers;
+	clientBase clients;
 
 	bool isClientLock;
 	int maxBitrate;
 public:
+
+	WSADATA data;
+
 	Udtp_thread *eventThread;
 
 	QUdtpSocket(int threadID);
 	~QUdtpSocket();
-	int createServerSocket(SocketData *data, int bitrate);
-	int closeServerSocket();
+	int createServerSocket(SocketData *data, int bitrate, int sockets = 1);
+	int closeServerSocket(SOCKET sock);
 	int createClientSocket(SocketData *data);
 
+	int acceptClient(SocketData *data);
 	int connectToServer();
 	int sendToServer(char *str, int len);
 	int recvFromServer(char *str, int len);
@@ -96,9 +110,8 @@ public:
 	int manageDescriptor(SocketData *cli, char *bytes);
 	int	manageBytesTransfer(SocketData *cli, char *bytes, int byteslen);
 
-	SocketData *getServer();
-	SocketData *getClient();
 	SocketData * getClientBySocket(SOCKET sock);
+	SocketData * getServerBySocket(SOCKET sock);
 	int getStringFromServer(SocketData *cli, char *buf);
 
 signals:
@@ -107,7 +120,6 @@ signals:
 
 public slots:
 	void deleteUdtp_thread();
-	int acceptClient(SocketData *data);
 	int fillServerData(char *buf, int len);
 	int execSocketActivity(fd_set *read, fd_set *write, fd_set *err);
 
@@ -121,9 +133,9 @@ class serverThread :public QThread
 public:
 	QUdtpSocket serv;
 
-	serverThread(SocketData *addr, int bitrate) :serv(0)
+	serverThread(SocketData *addr, int bitrate, int sockets = 1) :serv(0)
 	{
-		serv.createServerSocket(addr, bitrate);
+		serv.createServerSocket(addr, bitrate, sockets);
 	}
 
 	void run()

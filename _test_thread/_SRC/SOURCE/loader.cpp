@@ -3,10 +3,6 @@
 
 int WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, char*, int nShowCmd)
 {
-	WSADATA data;
-	if (WSAStartup(0x0202, &data) != 0)
-		WSACleanup();
-
 	SocketData servAddr;
 	servAddr.addr.sin_addr.s_addr = inet_addr("127.0.0.1");
 	servAddr.addr.sin_port = htons(10000);
@@ -14,15 +10,35 @@ int WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, char*, int nShowCmd)
 	int argc = 0;
 	QApplication app(argc, 0);
 
+	const int serverSocketsNumber = 30;
+	const int minSocketsNumber = 1;
+
 	const int MAX_BITRATE = 100;
-	serverThread *newserver = new serverThread(&servAddr, MAX_BITRATE);
+	serverThread *newserver = new serverThread(&servAddr, MAX_BITRATE, serverSocketsNumber);
 	newserver->start();
+
 
 	clientThread *newclient = new clientThread(&servAddr);
 	newclient->start();
 
-    return app.exec();
 
+// STRESS TEST
+	int i = 0;
+
+	if (serverSocketsNumber > 1)
+	{
+		clientThread *newclient2[serverSocketsNumber - 1];
+
+		for (i = 0; i < serverSocketsNumber - 1; i++)
+		{
+			servAddr.addr.sin_port = htons(SERVER_CHANNELS_BEGIN + i);
+			newclient2[i] = new clientThread(&servAddr);
+			newclient2[i]->start();
+		}
+	}
+
+    return app.exec();
+///////////   END STRESS TEST
 }
 
 void clientThread::run()
@@ -31,31 +47,29 @@ void clientThread::run()
 
 	cli.connectToServer();
 
-	Sleep(2000);
-	int a = 0;
-
 	char *str1 = "this is a test: rwerwerqwefddfghrtgrtggef  erferterfefwerwetregefvfdseferfr fgegegerferfefergergegtgtg htyhyhrthrtgrgererthgfhg efgetgrtyrtgfgdfewrer hrthrtyrgdfgdrgergrthrht df    12345";
 	cli.sendToServer(str1, strlen(str1)+1);
 
-	char str[20];
-	cli.recvFromServer(str, 20);
+	char str[120];
+	cli.recvFromServer(str, 120);
 	this->exec();
 }
 
 int QUdtpSocket::acceptClient(SocketData *data)
 {
+	clientBasePair curClient(data->sock, new SocketData);
 
-	client = new SocketData;
-
-	client->sock = data->sock;
-	client->addr.sin_family = data->addr.sin_family;
-	client->addr.sin_port = data->addr.sin_port;
-	client->addr.sin_addr.s_addr = data->addr.sin_addr.s_addr;
+	curClient.second->sock = data->sock;
+	curClient.second->addr.sin_family = data->addr.sin_family;
+	curClient.second->addr.sin_port = data->addr.sin_port;
+	curClient.second->addr.sin_addr.s_addr = data->addr.sin_addr.s_addr;
 
 
-	client->bitrate = DESCRIPTOR_LENGTH;
-	client->isReadDescriptor = false;
+	curClient.second->bitrate = DESCRIPTOR_LENGTH;
+	curClient.second->isReadDescriptor = false;
 
+
+	clients.insert(curClient);
 	return 0;
 }
 
@@ -78,7 +92,8 @@ int QUdtpSocket::getStringFromServer(SocketData *cli, char *buf)
 	string bstr(str.toUtf8().constData());
 	int size = bstr.size();
 
-	memcpy(buf, bstr.c_str() + cli->bytessend, cli->bitrate);
+	memcpy(buf + 1, &cli->bitrate, 4);
+	memcpy(buf + DESCRIPTOR_LENGTH, bstr.c_str() + cli->bytessend, cli->bitrate);
 
 	return 0;
 }

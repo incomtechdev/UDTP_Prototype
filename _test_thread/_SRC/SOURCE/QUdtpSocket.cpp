@@ -18,7 +18,6 @@ Udtp_thread::Udtp_thread(QUdtpSocket *_parent, int ID) : parent(_parent), isRunn
 
 	connect(parent, SIGNAL(setRunning(bool)), this, SLOT(setRunning(bool)));
 	connect(this, SIGNAL(deleteUdtp_thread()), parent, SLOT(deleteUdtp_thread()));
-	connect(this, SIGNAL(acceptClient(SocketData *)), parent, SLOT(acceptClient(SocketData *)));
 	connect(this, SIGNAL(lockClientConnection(bool)), parent, SLOT(lockClientConnection(bool)));
 	connect(this, SIGNAL(fillServerData(char *, int)), parent, SLOT(fillServerData(char *, int)));
 
@@ -38,7 +37,6 @@ Udtp_thread::~Udtp_thread()
 
 void Udtp_thread::setRunning(bool run)
 {
-	isRunning = run;
 	if (run)
 		start();
 }
@@ -62,26 +60,37 @@ void Udtp_thread::run()
 	this->exec();
 }
 
-QUdtpSocket::QUdtpSocket(int threadID) : server(0), client(0), isClientLock(false), maxBitrate(0)
+QUdtpSocket::QUdtpSocket(int threadID) : isClientLock(false), maxBitrate(0)
 {
+	if (WSAStartup(0x0202, &data) != 0)
+		WSACleanup();
 	eventThread = new Udtp_thread(this, threadID);
 }
 
 QUdtpSocket::~QUdtpSocket()
 {
+
 	if (eventThread)
 		delete eventThread;
 
-	if (server)
+	for (int i = 0; i < servers.size(); i++)
 	{
-		closesocket(client->sock);
-		delete server;
+		SocketData *data = servers[i];
+		if (data->sock >0)
+			closesocket(data->sock);
+		delete data;
+
 	}
-	if (client)
+	for (int i = 0; i < clients.size(); i++)
 	{
-		closesocket(client->sock);
-		delete client;
+		SocketData *data = clients[i];
+		if (data->sock >0)
+			closesocket(data->sock);
+		delete data;
+
 	}
+
+	clients.clear();
 
 	WSACleanup();
 }
@@ -94,16 +103,17 @@ int QUdtpSocket::execSocketActivity(fd_set *read, fd_set *write, fd_set *err)
 
 	for (i = 0; i < read->fd_count; i += 1)
 	{
-		if (read->fd_array[i] == server->sock)
+		curClient = getServerBySocket(read->fd_array[i]);
+		if (curClient)
 		{
 			SocketData data;
-			int len=1;
-			data.sock = accept(server->sock, (sockaddr*)(&data.addr), &len);
+			int len=16;
+			data.sock = accept(read->fd_array[i], (sockaddr*)(&data.addr), &len);
 //			int a = WSAGetLastError();
 //////////////////////////          функция выренесена в load.cpp        ////////////////////
 			acceptClient(&data);
 /////////////////////////////////////////////////////////////////////////////////////////////
-			FD_SET(client->sock, &eventThread->set);
+			FD_SET(data.sock, &eventThread->set);
 
 			send(data.sock, &ch, 1, 0);
 		}
@@ -138,12 +148,12 @@ int QUdtpSocket::execSocketActivity(fd_set *read, fd_set *write, fd_set *err)
 	{
 		curClient = getClientBySocket(_write.fd_array[i]);
 
-		char *bytes = new char[curClient->bitrate];
+		char *bytes = new char[curClient->bitrate + DESCRIPTOR_LENGTH];
 //////////////////////////          функция выренесена в load.cpp        ////////////////////
 		getStringFromServer(curClient, bytes);
 /////////////////////////////////////////////////////////////////////////////////////////////
 
-		send(client->sock, bytes, curClient->bitrate, 0);
+		send(curClient->sock, bytes, curClient->bitrate + DESCRIPTOR_LENGTH, 0);
 		manageBytesTransfer(curClient, bytes, curClient->bitrate);
 		delete[] bytes;
 
@@ -170,15 +180,19 @@ int QUdtpSocket::manageDescriptor(SocketData *cli, char *bytes)
 
 	cli->isReadDescriptor = true;
 
+	ch = 50;
+	send(cli->sock, &ch, 1, 0);
+
 	if (bytes[0] == 0)		//// descriptor for write data
 	{
 		cli->direction = 1;
+		char bytesD[DESCRIPTOR_LENGTH];
+		memcpy(bytesD + 1, &cli->bitrate, 4);
+		send(cli->sock, bytesD, DESCRIPTOR_LENGTH, 0);
 	}
 	else if (bytes[0] == 1)		// descriptor for read data
 	{
 		cli->direction = 2;
-		ch = 50;
-		send(cli->sock, &ch, 1, 0);
 		FD_SET(cli->sock, &eventThread->write);
 	}
 
@@ -195,6 +209,17 @@ int	QUdtpSocket::manageBytesTransfer(SocketData *cli, char *bytes, int byteslen)
 	if (cli->bytesrest <= 0)
 	{
 		////   end of transfer
+		if (cli->direction == 1)
+		{
+			ch = 20;
+			send(cli->sock, &ch, 1, 0);
+		}
+		else if (cli->direction == 2)
+		{
+			ch = 0;
+			recv(cli->sock, &ch, 1, 0);
+		}
+
 		ch = 20;
 		send(cli->sock, &ch, 1, 0);
 		cli->isReadDescriptor = false;
@@ -205,8 +230,18 @@ int	QUdtpSocket::manageBytesTransfer(SocketData *cli, char *bytes, int byteslen)
 		if (cli->bitrate > cli->bytesrest)
 			cli->bitrate = cli->bytesrest;
 
+		if (cli->direction == 1)
+		{
+			ch = 20;
+			send(cli->sock, &ch, 1, 0);
+			char bytesD[DESCRIPTOR_LENGTH];
+			memcpy(bytesD + 1, &cli->bitrate, 4);
+			send(cli->sock, bytesD, DESCRIPTOR_LENGTH, 0);
+		}
 		if (cli->direction == 2)
 		{
+			ch = 0;
+			recv(cli->sock, &ch, 1, 0);
 			FD_SET(cli->sock, &eventThread->write);
 		}
 	}
@@ -214,68 +249,87 @@ int	QUdtpSocket::manageBytesTransfer(SocketData *cli, char *bytes, int byteslen)
 	return 0;
 }
 
-int QUdtpSocket::createServerSocket(SocketData *data, int bitrate)
+int QUdtpSocket::createServerSocket(SocketData *data, int bitrate, int sockets)
 {
+	SocketData *socketData;
 	maxBitrate = bitrate;
 
 	QString errStr;
-	server = new SocketData;
-	// fill sockaddr_in structure
-	server->addr.sin_family = AF_INET;
-	server->addr.sin_addr.s_addr = data->addr.sin_addr.s_addr;
-	server->addr.sin_port = data->addr.sin_port;
-	server->bitrate = 0;
-	server->bytesrest = 0;
-	server->bytessend = 0;
-	server->direction = 0;
-	server->isReadDescriptor = false;
+	if (sockets == 0)
+		sockets = 1;
 
-	// create socket
-	server->sock = socket(server->addr.sin_family, SOCK_STREAM, IPPROTO_TCP);
+	for (int i = 0; i < sockets; i++)
+	{
 
-	int ioptVal = 1;
-	setsockopt(server->sock, SOL_SOCKET, SO_REUSEADDR, (char *)(&ioptVal), sizeof(1));
+		socketData = new SocketData;
+		// fill sockaddr_in structure
+		socketData->addr.sin_family = AF_INET;
+		socketData->addr.sin_addr.s_addr = data->addr.sin_addr.s_addr;
 
-	// bind and listen socket
-	bind(server->sock, (sockaddr *)&server->addr, sizeof(sockaddr_in));
+		if (i == 0)
+			socketData->addr.sin_port = data->addr.sin_port;
+		else
+			socketData->addr.sin_port = htons(SERVER_CHANNELS_BEGIN + i - 1);
 
-	//Successfull bind, listen for Server requests.
-	listen(server->sock, 1);
+		socketData->isReadDescriptor = false;
 
-	FD_SET(server->sock, &eventThread->set);
+		// create socket
+		socketData->sock = socket(socketData->addr.sin_family, SOCK_STREAM, IPPROTO_TCP);
 
+		int ioptVal = 1;
+		setsockopt(socketData->sock, SOL_SOCKET, SO_REUSEADDR, (char *)(&ioptVal), sizeof(1));
+
+		// bind and listen socket
+		int err = 0, err2 = 0;
+		err = bind(socketData->sock, (sockaddr *)(&socketData->addr), sizeof(sockaddr_in));
+
+		//Successfull bind, listen for Server requests.
+		err2 = listen(socketData->sock, 1);
+
+		FD_SET(socketData->sock, &eventThread->set);
+		clientBasePair serverPair(socketData->sock, socketData);
+		servers.insert(serverPair);
+	}
 	emit setRunning(true);
 
 	return 0;
+
 }
 
 int QUdtpSocket::createClientSocket(SocketData *data)
 {
 	QString errStr;
-	client = new SocketData;
+	SocketData *socketData;
+
+	socketData = new SocketData;
 	// fill sockaddr_in structure
-	client->addr.sin_family = AF_INET;
-	client->addr.sin_addr.s_addr = data->addr.sin_addr.s_addr;
-	client->addr.sin_port = data->addr.sin_port;
+	socketData->addr.sin_family = AF_INET;
+	socketData->addr.sin_addr.s_addr = data->addr.sin_addr.s_addr;
+	socketData->addr.sin_port = data->addr.sin_port;
 
 	// create socket
-	client->sock = socket(client->addr.sin_family, SOCK_STREAM, IPPROTO_TCP);
+	socketData->sock = socket(socketData->addr.sin_family, SOCK_STREAM, IPPROTO_TCP);
 
-	FD_SET(client->sock, &eventThread->set);
+	FD_SET(socketData->sock, &eventThread->set);
+
+	clientBasePair serverPair(socketData->sock, socketData);
+	servers.insert(serverPair);
 
 	return 0;
 }
 
-int QUdtpSocket::closeServerSocket()
+int QUdtpSocket::closeServerSocket(SOCKET sock)
 {
-	if (server)
+	SocketData *socketData = getServerBySocket(sock);
+	if (socketData)
 	{
-		emit setRunning(false);
-		if (server->sock > 0)
-			closesocket(server->sock);
+		if (socketData->sock > 0)
+			closesocket(socketData->sock);
+		servers.erase(servers.find(sock));
+		
+		delete socketData;
+		socketData = 0;
 	}
-	delete server;
-	server = 0;
 	
 	return 0;
 }
@@ -283,26 +337,19 @@ int QUdtpSocket::closeServerSocket()
 void QUdtpSocket::deleteUdtp_thread()
 {
 	if (eventThread)
+	{
+		eventThread->quit();
 		delete eventThread;
+	}
 
 	eventThread = 0;
-}
-
-SocketData *QUdtpSocket::getServer()
-{
-	return server;
-}
-
-SocketData *QUdtpSocket::getClient()
-{
-	return client;
 }
 
 int QUdtpSocket::connectToServer()
 {
 	char ch = 0;
-
-	::connect(client->sock, (sockaddr*)(&client->addr), sizeof(sockaddr));
+	SocketData *client = servers.begin()->second;
+	::connect(client->sock, (sockaddr*)(&client->addr), sizeof(sockaddr_in));
 
 	recv(client->sock, &ch, 1, 0);
 
@@ -311,20 +358,43 @@ int QUdtpSocket::connectToServer()
 
 int QUdtpSocket::sendToServer(char *str, int len)
 {
-// form descriptor (1st byte = 0)
-	char *buff = new char [len+DESCRIPTOR_LENGTH];
+	char ch = 0;
+	SocketData *client = servers.begin()->second;
+// form descriptor 
+// send bytes length for server (1st byte = 1)
+	char buff[DESCRIPTOR_LENGTH];
 	buff[0] = 0;
 	memcpy(buff + 1, &len, 4);
-	memset(buff + DESCRIPTOR_LENGTH, 0, len);
 
+	send(client->sock, buff, DESCRIPTOR_LENGTH, 0);
 
-	strncpy(buff + DESCRIPTOR_LENGTH, str, len);
-	len += DESCRIPTOR_LENGTH;
+	/// verify ready for send
+	ch = 0;
+	recv(client->sock, &ch, 1, 0);
 	// send bytes
 
-	send(client->sock, buff, len, 0);
+//	send(client->sock, str, len, 0);
 
-	char ch = 0;
+	client->bytesrest = 0;
+	bool isrecv = true;
+	while (isrecv)
+	{
+		recv(client->sock, buff, DESCRIPTOR_LENGTH, 0);
+		memcpy(&client->bytessend, buff + 1, 4);
+		char *buffstr = new char[client->bytessend];
+		memcpy(buffstr, str + client->bytesrest, client->bytessend);
+		send(client->sock, buffstr, client->bytessend, 0);
+
+		ch = 0;
+		recv(client->sock, &ch, 1, 0);
+		client->bytesrest += client->bytessend;
+		if (client->bytesrest >= len)
+			isrecv = false;
+
+		delete[] buffstr;
+	}
+
+	ch = 0;
 	recv(client->sock, &ch, 1, 0);
 
 	return 0;
@@ -333,7 +403,7 @@ int QUdtpSocket::sendToServer(char *str, int len)
 int QUdtpSocket::recvFromServer(char *str, int len)
 {
 	char ch = 0;
-
+	SocketData *client = servers.begin()->second;
 // send bytes length for server (1st byte = 1)
 	char buff[DESCRIPTOR_LENGTH];
 	buff[0] = 1;
@@ -346,10 +416,28 @@ int QUdtpSocket::recvFromServer(char *str, int len)
 	recv(client->sock, &ch, 1, 0);
 
 // recv bytes
-	recv(client->sock, str, len, 0);
+	memset(str, 0, len);
+	client->bytesrest = 0;
+	bool isrecv = true;
+	while (isrecv)
+	{
+		recv(client->sock, buff, DESCRIPTOR_LENGTH, 0);
+		memcpy(&client->bytessend, buff + 1, 4);
+		char *buffstr = new char[client->bytessend];
+		recv(client->sock, buffstr, client->bytessend, 0);
+		memcpy(str + client->bytesrest, buffstr, client->bytessend);
 
-	ch = 100;
-	send(client->sock, &ch, 1, 0);
+		ch = 50;
+		send(client->sock, &ch, 1, 0);
+		client->bytesrest += client->bytessend;
+		if (client->bytesrest >= len)
+			isrecv = false;
+
+		delete[] buffstr;
+	}
+
+	ch = 50;
+	recv(client->sock, &ch, 1, 0);
 
 	return 0;
 }
@@ -366,8 +454,18 @@ int QUdtpSocket::getBitrate()
 
 SocketData *QUdtpSocket::getClientBySocket(SOCKET sock)
 {
-	if (sock == client->sock)
-		return client;
+	clientBase::iterator clientIter = clients.find(sock);
+	if (clientIter != clients.end())
+		return clientIter->second;
+
+	return 0;
+}
+
+SocketData *QUdtpSocket::getServerBySocket(SOCKET sock)
+{
+	clientBase::iterator serverIter = servers.find(sock);
+	if (serverIter != servers.end())
+		return serverIter->second;
 
 	return 0;
 }
